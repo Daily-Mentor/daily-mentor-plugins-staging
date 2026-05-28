@@ -1,0 +1,21 @@
+{
+  "_comment": "Daily Mentor target benchmarks. Sourced from AI_SPECIALIST_HANDOVER.md and Final Report Card spec.",
+  "financial": {
+    "cogs_pct_max": 0.40,
+    "marketing_pct_max": 0.30,
+    "opex_pct_max": 0.15,
+    "profit_pct_min": 0.15
+  },
+  "growth": {
+    "mer_max": 0.30,
+    "contribution_margin_min": 0.35,
+    "conversion_rate_min": 0.025,
+    "returns_pct_max": 0.03,
+    "aov_min_aud": 80,
+    "nc_order_share_min": 0.50,
+    "nc_order_share_max": 0.70,
+    "rc_aov_lift_min": 0.20,
+    "month_2_ltv_growth_min": 0.30,
+    "month_5_ltv_growth_min": 0.50
+  }
+}

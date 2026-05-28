@@ -1,0 +1,11 @@
+{
+  "name": "report-card",
+  "version": "0.1.0",
+  "description": "Generate a 12-tab e-commerce diagnostic Report Card (HTML + xlsx) from a standardised 7-file input pack (Shopify + Xero + ad platforms).",
+  "author": {
+    "name": "Paul Crossland",
+    "email": "hello@paulcrossland.com"
+  },
+  "license": "MIT",
+  "keywords": ["ecommerce", "shopify", "xero", "diagnostics", "mentorship", "analytics"]
+}

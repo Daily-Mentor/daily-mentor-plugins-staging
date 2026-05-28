@@ -1,0 +1,44 @@
+.DS_Store
+node_modules/
+*.log
+.env
+.env.local
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# ---- NOT FOR DISTRIBUTION ----
+# Client financial data — never commit to a public marketplace repo.
+boosh-files/
+*-files/
+inputs/
+
+# Generated report artefacts
+output/
+report-card-*.html
+report-card-*.xlsx
+audit/
+
+# Runtime FX cache (fetched on demand)
+plugins/report-card/.fx-cache/
+
+# Dev references / brand assets (not part of the distributable skill)
+AI_SPECIALIST_HANDOVER.md
+*Brand Kit*.pdf
+Untitled spreadsheet.xlsx
+mapping_audit.md
+Report_Card_*.xlsx
+report-card-{date}.xlsx
+
+# Test fixtures may contain client data — keep synthetic only; ignore real drops
+plugins/report-card/tests/fixtures/**/*.xlsx
+plugins/report-card/tests/fixtures/**/*real*

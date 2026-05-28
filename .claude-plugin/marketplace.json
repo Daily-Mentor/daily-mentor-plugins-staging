@@ -1,0 +1,21 @@
+{
+  "name": "daily-mentor",
+  "owner": {
+    "name": "Paul Crossland",
+    "email": "hello@paulcrossland.com"
+  },
+  "metadata": {
+    "description": "Daily Mentor plugin marketplace for Claude Code.",
+    "version": "0.2.0"
+  },
+  "plugins": [
+    {
+      "name": "report-card",
+      "source": "./plugins/report-card",
+      "description": "Generate a 12-tab e-commerce diagnostic Report Card (HTML + xlsx) from a standardised 7-file input pack.",
+      "version": "0.1.0",
+      "category": "analytics",
+      "keywords": ["ecommerce", "shopify", "xero", "diagnostics", "mentorship"]
+    }
+  ]
+}

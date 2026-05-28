@@ -1,0 +1,13 @@
+{
+  "_comment": "Mentor defaults for NCCM Calculator when client-specific data is not derivable from Xero/Shopify.",
+  "nccm": {
+    "payment_processing_pct": 0.029,
+    "shopify_markets_fee_pct": 0.015,
+    "transaction_fee_per_order_aud": 0.30,
+    "packaging_per_order_aud": 0.50,
+    "fulfillment_per_order_aud": 4.50
+  },
+  "daily_tracker": {
+    "after_fees_factor": 0.96
+  }
+}

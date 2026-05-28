@@ -1,0 +1,376 @@
+/* Daily Mentor Report Card — single-file HTML stylesheet.
+ * Brand kit (V3): #332A6B deep purple · #977DFF lavender · #E4DED8 cream
+ *                  #FFCE62 yellow · #3A4DFF blue · #000000 black
+ * Heading typeface: Poppins (SemiBold/Bold). Body: Futura → system sans-serif fallback.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap");
+
+:root {
+  --dm-purple: #332A6B;
+  --dm-purple-soft: #4a3f8a;
+  --dm-lavender: #977DFF;
+  --dm-lavender-soft: #b8a3ff;
+  --dm-cream: #E4DED8;
+  --dm-cream-light: #F2EEEA;
+  --dm-yellow: #FFCE62;
+  --dm-blue: #3A4DFF;
+  --dm-black: #000000;
+  --dm-ink: #1A1530;
+  --dm-ink-soft: #5a5475;
+  --dm-rule: #d6cfc7;
+
+  --conf-reconciled: #4d8b4f;
+  --conf-provisional: var(--dm-lavender);
+  --conf-mentor: var(--dm-yellow);
+  --conf-missing: #b04a4a;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  font-family: "Futura", "Futura PT", "Helvetica Neue", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dm-ink);
+  background: var(--dm-cream-light);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 { font-family: "Poppins", system-ui, sans-serif; font-weight: 600; letter-spacing: -0.005em; }
+
+/* ---- Header bar ---- */
+header.rc-head {
+  background: linear-gradient(135deg, var(--dm-purple) 0%, var(--dm-purple-soft) 100%);
+  color: var(--dm-cream);
+  padding: 22px 32px;
+  display: flex; align-items: center; gap: 22px;
+}
+header.rc-head h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+header.rc-head .rc-sub {
+  display: block;
+  margin-top: 2px;
+  font-family: "Poppins", system-ui, sans-serif;
+  color: var(--dm-lavender-soft);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+header.rc-head > div { line-height: 1.2; }
+header.rc-head .rc-meta {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--dm-cream);
+  opacity: 0.75;
+  font-family: "Poppins", system-ui, sans-serif;
+  letter-spacing: 0.03em;
+}
+
+/* ---- Tab navigation ---- */
+nav.rc-tabs {
+  background: #fff;
+  border-bottom: 1px solid var(--dm-rule);
+  padding: 0 24px;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  position: sticky; top: 0; z-index: 30;
+}
+nav.rc-tabs::-webkit-scrollbar { height: 4px; }
+nav.rc-tabs::-webkit-scrollbar-thumb { background: var(--dm-rule); border-radius: 2px; }
+nav.rc-tabs button {
+  background: none;
+  border: 0;
+  padding: 14px 16px;
+  cursor: pointer;
+  font-family: "Poppins", system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dm-ink-soft);
+  border-bottom: 3px solid transparent;
+  white-space: nowrap;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+nav.rc-tabs button:hover { color: var(--dm-purple); }
+nav.rc-tabs button.active {
+  color: var(--dm-purple);
+  border-bottom-color: var(--dm-lavender);
+  font-weight: 600;
+}
+
+/* ---- Main layout ---- */
+main.rc-body { padding: 28px 32px 80px; max-width: 1480px; margin: 0 auto; }
+section.tab-panel { display: none; }
+section.tab-panel.active { display: block; }
+
+.tab-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 6px;
+  color: var(--dm-purple);
+  letter-spacing: -0.015em;
+}
+.tab-subtitle {
+  color: var(--dm-ink-soft);
+  margin: 0 0 22px;
+  font-size: 14px;
+  max-width: 920px;
+}
+
+/* ---- Pill labels (brand-kit section tags) ---- */
+.dm-pill {
+  display: inline-block;
+  background: var(--dm-purple);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-family: "Poppins", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.dm-pill.alt   { background: var(--dm-lavender); color: var(--dm-purple); }
+.dm-pill.warm  { background: var(--dm-yellow);   color: var(--dm-purple); }
+.dm-pill.cool  { background: var(--dm-blue);     color: #fff; }
+.dm-pill.light { background: var(--dm-cream);    color: var(--dm-purple); }
+
+/* ---- Banners ---- */
+.banner {
+  padding: 12px 16px;
+  margin: 0 0 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  background: #fff;
+  border: 1px solid var(--dm-rule);
+  display: flex; gap: 12px; align-items: flex-start;
+}
+.banner::before {
+  content: "";
+  display: inline-block;
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 8px;
+  border-radius: 50%;
+}
+.banner.info    { background: #f5f1ff; border-color: var(--dm-lavender-soft); }
+.banner.info::before    { background: var(--dm-lavender); }
+.banner.warning { background: #fff7e3; border-color: var(--dm-yellow); }
+.banner.warning::before { background: var(--dm-yellow); }
+.banner.error   { background: #f5e8eb; border-color: #c0567b; }
+.banner.error::before   { background: #b04a4a; }
+
+/* ---- Tables ---- */
+table.rc-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid var(--dm-rule);
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 13px;
+  box-shadow: 0 1px 0 rgba(51,42,107,0.04);
+}
+table.rc-table th {
+  text-align: right;
+  padding: 10px 12px;
+  font-family: "Poppins", system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dm-purple);
+  background: var(--dm-cream);
+  border-bottom: 1px solid var(--dm-rule);
+}
+table.rc-table th:first-child { text-align: left; }
+table.rc-table td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--dm-cream-light);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+table.rc-table td:first-child { text-align: left; }
+table.rc-table tbody tr:last-child td { border-bottom: 0; }
+table.rc-table tbody tr:hover { background: var(--dm-cream-light); }
+
+/* Section divider row — pill-style header (brand-kit aesthetic) */
+table.rc-table tr.section td {
+  background: var(--dm-purple);
+  color: #fff;
+  font-family: "Poppins", system-ui, sans-serif;
+  font-weight: 600;
+  padding: 10px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+table.rc-table tr.section td:first-child { border-top-left-radius: 0; }
+
+/* Total rows — cream background, ink weight */
+table.rc-table tr.total td {
+  background: var(--dm-cream);
+  font-weight: 600;
+  color: var(--dm-purple);
+}
+
+.indent-1 { padding-left: 24px !important; }
+.indent-2 { padding-left: 44px !important; }
+.bold { font-weight: 600; color: var(--dm-purple); }
+.missing { color: var(--dm-ink-soft); opacity: 0.5; }
+
+/* ---- Confidence dots ---- */
+.cell-wrap { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+td:first-child .cell-wrap { justify-content: flex-start; }
+.conf {
+  width: 6px; height: 6px; border-radius: 50%;
+  display: inline-block; flex-shrink: 0;
+  opacity: 0.7;
+}
+.conf-reconciled  { background: var(--conf-reconciled); }
+.conf-provisional { background: var(--conf-provisional); }
+.conf-mentor_input{ background: var(--conf-mentor); }
+.conf-missing     { background: var(--conf-missing); }
+.conf-derived     { background: transparent; }
+
+/* ---- Tooltips ---- */
+.cell-trigger {
+  position: relative;
+  cursor: help;
+  border-bottom: 1px dotted var(--dm-rule);
+}
+.cell-trigger .tt {
+  display: none;
+  position: absolute;
+  z-index: 50;
+  bottom: calc(100% + 6px);
+  right: 0;
+  min-width: 280px;
+  max-width: 380px;
+  background: var(--dm-purple);
+  color: var(--dm-cream);
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 12px 32px rgba(26, 21, 48, 0.32);
+  font-family: "Futura", "Helvetica Neue", system-ui, sans-serif;
+}
+.cell-trigger:hover .tt { display: block; }
+.tt .tt-formula  { font-family: "Poppins", system-ui, sans-serif; font-weight: 600; color: #fff; margin-bottom: 6px; }
+.tt .tt-inputs   { color: var(--dm-lavender-soft); margin: 4px 0; padding-left: 0; list-style: none; }
+.tt .tt-inputs li { margin: 0; padding-left: 12px; position: relative; }
+.tt .tt-inputs li::before { content: "•"; position: absolute; left: 0; opacity: 0.6; }
+.tt .tt-result   { color: #fff; margin: 6px 0; font-weight: 500; }
+.tt .tt-sources  { color: var(--dm-lavender-soft); font-size: 11px; margin-top: 8px; opacity: 0.9; }
+.tt .tt-fx       { color: var(--dm-yellow); font-size: 11px; margin-top: 4px; }
+.tt .tt-conf     { color: var(--dm-lavender-soft); font-size: 11px; margin-top: 6px; font-style: italic; opacity: 0.85; }
+.tt .tt-gotchas  { color: var(--dm-lavender); font-size: 11px; margin-top: 4px; }
+.tt .tt-conf-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: "Poppins", system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-right: 6px;
+}
+.tt .tt-conf-badge.reconciled   { background: var(--conf-reconciled); color: #fff; }
+.tt .tt-conf-badge.provisional  { background: var(--dm-lavender); color: var(--dm-purple); }
+.tt .tt-conf-badge.mentor_input { background: var(--dm-yellow); color: var(--dm-purple); }
+.tt .tt-conf-badge.missing      { background: var(--conf-missing); color: #fff; }
+.tt .tt-conf-badge.derived      { background: var(--dm-cream); color: var(--dm-purple); }
+
+/* ---- Daily Tracker month pills ---- */
+.month-pills {
+  display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px;
+}
+.month-pills button {
+  border: 1px solid var(--dm-rule);
+  background: #fff;
+  color: var(--dm-ink-soft);
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-family: "Poppins", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.month-pills button:hover { color: var(--dm-purple); border-color: var(--dm-lavender); }
+.month-pills button.active {
+  background: var(--dm-purple);
+  color: #fff;
+  border-color: var(--dm-purple);
+  font-weight: 600;
+}
+
+/* ---- Tab-level notes block ---- */
+.rc-notes {
+  background: #fff;
+  border: 1px solid var(--dm-rule);
+  border-left: 3px solid var(--dm-lavender);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-top: 22px;
+  font-size: 12px;
+}
+.rc-notes h3 {
+  margin: 0 0 8px;
+  font-family: "Poppins", system-ui, sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dm-purple);
+  font-weight: 600;
+}
+.rc-notes ul { margin: 0; padding-left: 18px; color: var(--dm-ink-soft); }
+.rc-notes li { margin: 3px 0; line-height: 1.6; }
+
+/* ---- Audit results ---- */
+.audit-row {
+  display: flex;
+  gap: 14px;
+  padding: 10px 14px;
+  align-items: baseline;
+  background: #fff;
+  border: 1px solid var(--dm-rule);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.audit-status {
+  font-family: "Poppins", system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.audit-status.PASS { background: #dceadc; color: #2c5e2e; }
+.audit-status.FAIL { background: #f5dadf; color: #7a2d3e; }
+.audit-status.SKIP { background: var(--dm-cream); color: var(--dm-purple); }
+.audit-status.HALT { background: var(--dm-black); color: var(--dm-yellow); }
+
+/* ---- Print ---- */
+@media print {
+  nav.rc-tabs { display: none; }
+  section.tab-panel { display: block !important; page-break-after: always; }
+  header.rc-head { background: var(--dm-purple) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

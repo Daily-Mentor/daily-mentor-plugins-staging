@@ -1,0 +1,137 @@
+{
+  "_comment": "Case-insensitive Xero account-name → standard P&L bucket mapping. Contribution-margin shape: any cost that scales with units sold lives under 'Cost of Sales' (Freight, Packaging, Merchant Fees, Fulfilment, Customs, Returns Processing). Fixed costs (Marketing, People, Software, Other OPEX) live under Operating Expenses.",
+  "exact": {
+    "cost of goods sold": {"bucket": "cogs_product_xero", "section": "Cost of Sales", "sort": 100, "is_revenue": false},
+    "cost of sales": {"bucket": "cogs_product_xero", "section": "Cost of Sales", "sort": 100, "is_revenue": false},
+    "cost of goods sold - freight": {"bucket": "cogs_freight", "section": "Cost of Sales", "sort": 110, "is_revenue": false},
+    "cost of goods sold - shopify and paypal fees": {"bucket": "cogs_merchant", "section": "Cost of Sales", "sort": 120, "is_revenue": false},
+    "cost of goods sold - wise charges": {"bucket": "cogs_wise", "section": "Cost of Sales", "sort": 130, "is_revenue": false},
+    "materials": {"bucket": "cogs_materials", "section": "Cost of Sales", "sort": 140, "is_revenue": false},
+    "warehouse costs": {"bucket": "cogs_warehouse", "section": "Cost of Sales", "sort": 150, "is_revenue": false},
+
+    "freight & courier": {"bucket": "cogs_freight", "section": "Cost of Sales", "sort": 110, "is_revenue": false},
+    "freight and courier": {"bucket": "cogs_freight", "section": "Cost of Sales", "sort": 110, "is_revenue": false},
+    "courier & postage": {"bucket": "cogs_freight", "section": "Cost of Sales", "sort": 110, "is_revenue": false},
+    "shipping": {"bucket": "cogs_freight", "section": "Cost of Sales", "sort": 110, "is_revenue": false},
+
+    "packaging supplies": {"bucket": "cogs_packaging", "section": "Cost of Sales", "sort": 115, "is_revenue": false},
+    "packaging": {"bucket": "cogs_packaging", "section": "Cost of Sales", "sort": 115, "is_revenue": false},
+
+    "transaction fees": {"bucket": "cogs_merchant", "section": "Cost of Sales", "sort": 120, "is_revenue": false},
+    "usage fees": {"bucket": "cogs_merchant", "section": "Cost of Sales", "sort": 121, "is_revenue": false},
+    "merchant fees": {"bucket": "cogs_merchant", "section": "Cost of Sales", "sort": 120, "is_revenue": false},
+    "payment processing": {"bucket": "cogs_merchant", "section": "Cost of Sales", "sort": 120, "is_revenue": false},
+
+    "gst on imports": {"bucket": "cogs_customs", "section": "Cost of Sales", "sort": 135, "is_revenue": false},
+    "customs": {"bucket": "cogs_customs", "section": "Cost of Sales", "sort": 135, "is_revenue": false},
+    "duties": {"bucket": "cogs_customs", "section": "Cost of Sales", "sort": 135, "is_revenue": false},
+
+    "warehouse": {"bucket": "cogs_warehouse", "section": "Cost of Sales", "sort": 150, "is_revenue": false},
+    "fulfilment": {"bucket": "cogs_warehouse", "section": "Cost of Sales", "sort": 150, "is_revenue": false},
+    "fulfillment": {"bucket": "cogs_warehouse", "section": "Cost of Sales", "sort": 150, "is_revenue": false},
+    "3pl fees": {"bucket": "cogs_warehouse", "section": "Cost of Sales", "sort": 150, "is_revenue": false},
+    "customer service": {"bucket": "cogs_customer_service", "section": "Cost of Sales", "sort": 160, "is_revenue": false},
+
+    "sundry income": {"bucket": "other_income_sundry", "section": "Other Income", "sort": 200, "is_revenue": false, "is_other_income": true},
+    "foreign exchange profit/(loss)": {"bucket": "other_income_fx", "section": "Other Income", "sort": 210, "is_revenue": false, "is_other_income": true},
+    "foreign exchange gains/losses": {"bucket": "other_income_fx", "section": "Other Income", "sort": 210, "is_revenue": false, "is_other_income": true},
+    "interest income": {"bucket": "other_income_interest", "section": "Other Income", "sort": 220, "is_revenue": false, "is_other_income": true},
+
+    "advertising": {"bucket": "marketing", "section": "Marketing", "sort": 300, "is_revenue": false},
+    "advertising and marketing": {"bucket": "marketing", "section": "Marketing", "sort": 300, "is_revenue": false},
+    "advertising & marketing": {"bucket": "marketing", "section": "Marketing", "sort": 300, "is_revenue": false},
+    "marketing": {"bucket": "marketing", "section": "Marketing", "sort": 300, "is_revenue": false},
+    "digital marketing": {"bucket": "marketing", "section": "Marketing", "sort": 300, "is_revenue": false},
+
+    "wages and salaries": {"bucket": "wages", "section": "People", "sort": 400, "is_revenue": false},
+    "salaries": {"bucket": "wages", "section": "People", "sort": 400, "is_revenue": false},
+    "superannuation": {"bucket": "super", "section": "People", "sort": 410, "is_revenue": false},
+    "contractors": {"bucket": "contractors", "section": "People", "sort": 420, "is_revenue": false},
+
+    "subscriptions": {"bucket": "subscriptions", "section": "Software", "sort": 500, "is_revenue": false},
+    "subscriptions & software": {"bucket": "subscriptions", "section": "Software", "sort": 500, "is_revenue": false},
+    "software": {"bucket": "subscriptions", "section": "Software", "sort": 500, "is_revenue": false},
+
+    "administration costs": {"bucket": "admin", "section": "Other Operating Expenses", "sort": 610, "is_revenue": false},
+    "bank fees": {"bucket": "bank_fees", "section": "Other Operating Expenses", "sort": 620, "is_revenue": false},
+    "bank revaluations": {"bucket": "bank_reval", "section": "Other Operating Expenses", "sort": 625, "is_revenue": false},
+    "consulting & accounting": {"bucket": "consulting", "section": "Other Operating Expenses", "sort": 630, "is_revenue": false},
+    "tax & accounting": {"bucket": "consulting", "section": "Other Operating Expenses", "sort": 630, "is_revenue": false},
+    "accounting": {"bucket": "consulting", "section": "Other Operating Expenses", "sort": 630, "is_revenue": false},
+    "entertainment": {"bucket": "entertainment", "section": "Other Operating Expenses", "sort": 635, "is_revenue": false},
+    "filing fees": {"bucket": "filing", "section": "Other Operating Expenses", "sort": 636, "is_revenue": false},
+    "general expenses": {"bucket": "general", "section": "Other Operating Expenses", "sort": 640, "is_revenue": false},
+    "interest expense": {"bucket": "interest", "section": "Other Operating Expenses", "sort": 645, "is_revenue": false},
+    "legal expenses": {"bucket": "legal", "section": "Other Operating Expenses", "sort": 648, "is_revenue": false},
+    "light, power, heating": {"bucket": "utilities", "section": "Other Operating Expenses", "sort": 650, "is_revenue": false},
+    "office expenses": {"bucket": "office", "section": "Other Operating Expenses", "sort": 660, "is_revenue": false},
+    "printing & stationery": {"bucket": "printing", "section": "Other Operating Expenses", "sort": 665, "is_revenue": false},
+    "rent": {"bucket": "rent", "section": "Other Operating Expenses", "sort": 670, "is_revenue": false},
+    "telephone & internet": {"bucket": "telephone", "section": "Other Operating Expenses", "sort": 675, "is_revenue": false},
+    "travel - national": {"bucket": "travel", "section": "Other Operating Expenses", "sort": 680, "is_revenue": false},
+    "travel - international": {"bucket": "travel", "section": "Other Operating Expenses", "sort": 685, "is_revenue": false},
+
+    "sales": {"bucket": "revenue", "section": "Revenue", "sort": 1, "is_revenue": true},
+    "sales - au local": {"bucket": "revenue_au", "section": "Revenue", "sort": 2, "is_revenue": true},
+    "sales - global": {"bucket": "revenue_global", "section": "Revenue", "sort": 3, "is_revenue": true},
+    "trading income": {"bucket": "revenue", "section": "Revenue", "sort": 1, "is_revenue": true},
+    "other revenue - shipping": {"bucket": "revenue_shipping", "section": "Revenue", "sort": 10, "is_revenue": true}
+  },
+  "contains": {
+    "cost of goods sold - freight": {"bucket": "cogs_freight", "section": "Cost of Sales", "sort": 110, "is_revenue": false},
+    "cost of goods sold - shopify": {"bucket": "cogs_merchant", "section": "Cost of Sales", "sort": 120, "is_revenue": false},
+    "cost of goods sold - paypal": {"bucket": "cogs_merchant", "section": "Cost of Sales", "sort": 120, "is_revenue": false},
+    "cost of goods sold - wise": {"bucket": "cogs_wise", "section": "Cost of Sales", "sort": 130, "is_revenue": false},
+    "cost of goods sold": {"bucket": "cogs_product_xero", "section": "Cost of Sales", "sort": 100, "is_revenue": false},
+    "cost of sales": {"bucket": "cogs_product_xero", "section": "Cost of Sales", "sort": 100, "is_revenue": false},
+
+    "freight": {"bucket": "cogs_freight", "section": "Cost of Sales", "sort": 110, "is_revenue": false},
+    "courier": {"bucket": "cogs_freight", "section": "Cost of Sales", "sort": 110, "is_revenue": false},
+    "packaging": {"bucket": "cogs_packaging", "section": "Cost of Sales", "sort": 115, "is_revenue": false},
+    "merchant fee": {"bucket": "cogs_merchant", "section": "Cost of Sales", "sort": 120, "is_revenue": false},
+    "transaction fee": {"bucket": "cogs_merchant", "section": "Cost of Sales", "sort": 120, "is_revenue": false},
+    "usage fee": {"bucket": "cogs_merchant", "section": "Cost of Sales", "sort": 121, "is_revenue": false},
+    "warehouse": {"bucket": "cogs_warehouse", "section": "Cost of Sales", "sort": 150, "is_revenue": false},
+    "fulfilment": {"bucket": "cogs_warehouse", "section": "Cost of Sales", "sort": 150, "is_revenue": false},
+    "fulfillment": {"bucket": "cogs_warehouse", "section": "Cost of Sales", "sort": 150, "is_revenue": false},
+    "3pl": {"bucket": "cogs_warehouse", "section": "Cost of Sales", "sort": 150, "is_revenue": false},
+    "customs": {"bucket": "cogs_customs", "section": "Cost of Sales", "sort": 135, "is_revenue": false},
+    "duties": {"bucket": "cogs_customs", "section": "Cost of Sales", "sort": 135, "is_revenue": false},
+    "gst on imports": {"bucket": "cogs_customs", "section": "Cost of Sales", "sort": 135, "is_revenue": false},
+
+    "foreign exchange": {"bucket": "other_income_fx", "section": "Other Income", "sort": 210, "is_revenue": false, "is_other_income": true},
+    "fx gain": {"bucket": "other_income_fx", "section": "Other Income", "sort": 210, "is_revenue": false, "is_other_income": true},
+    "fx loss": {"bucket": "other_income_fx", "section": "Other Income", "sort": 210, "is_revenue": false, "is_other_income": true},
+
+    "advertising": {"bucket": "marketing", "section": "Marketing", "sort": 300, "is_revenue": false},
+    "marketing": {"bucket": "marketing", "section": "Marketing", "sort": 300, "is_revenue": false},
+
+    "wages": {"bucket": "wages", "section": "People", "sort": 400, "is_revenue": false},
+    "salaries": {"bucket": "wages", "section": "People", "sort": 400, "is_revenue": false},
+    "superannuation": {"bucket": "super", "section": "People", "sort": 410, "is_revenue": false},
+    "payroll": {"bucket": "wages", "section": "People", "sort": 400, "is_revenue": false},
+    "contractor": {"bucket": "contractors", "section": "People", "sort": 420, "is_revenue": false},
+
+    "subscriptions": {"bucket": "subscriptions", "section": "Software", "sort": 500, "is_revenue": false},
+    "software": {"bucket": "subscriptions", "section": "Software", "sort": 500, "is_revenue": false},
+
+    "bank fee": {"bucket": "bank_fees", "section": "Other Operating Expenses", "sort": 620, "is_revenue": false},
+    "interest": {"bucket": "interest", "section": "Other Operating Expenses", "sort": 645, "is_revenue": false},
+    "travel": {"bucket": "travel", "section": "Other Operating Expenses", "sort": 680, "is_revenue": false},
+    "rent": {"bucket": "rent", "section": "Other Operating Expenses", "sort": 670, "is_revenue": false},
+    "telephone": {"bucket": "telephone", "section": "Other Operating Expenses", "sort": 675, "is_revenue": false},
+    "internet": {"bucket": "telephone", "section": "Other Operating Expenses", "sort": 675, "is_revenue": false},
+    "accounting": {"bucket": "consulting", "section": "Other Operating Expenses", "sort": 630, "is_revenue": false},
+    "consulting": {"bucket": "consulting", "section": "Other Operating Expenses", "sort": 630, "is_revenue": false},
+    "advisory": {"bucket": "consulting", "section": "Other Operating Expenses", "sort": 630, "is_revenue": false},
+    "legal": {"bucket": "legal", "section": "Other Operating Expenses", "sort": 648, "is_revenue": false},
+    "entertainment": {"bucket": "entertainment", "section": "Other Operating Expenses", "sort": 635, "is_revenue": false},
+
+    "sundry": {"bucket": "other_income_sundry", "section": "Other Income", "sort": 200, "is_revenue": false, "is_other_income": true},
+
+    "sales": {"bucket": "revenue", "section": "Revenue", "sort": 1, "is_revenue": true},
+    "revenue": {"bucket": "revenue", "section": "Revenue", "sort": 1, "is_revenue": true},
+    "income": {"bucket": "revenue", "section": "Revenue", "sort": 1, "is_revenue": true}
+  },
+  "default": {"bucket": "other", "section": "Other Operating Expenses", "sort": 900, "is_revenue": false}
+}
