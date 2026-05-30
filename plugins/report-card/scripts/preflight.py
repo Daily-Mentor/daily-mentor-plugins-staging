@@ -39,17 +39,25 @@ class PreflightReport:
     requirements: list[FileRequirement] = field(default_factory=list)
     extras: list[str] = field(default_factory=list)  # Files in the dir that don't map to any requirement
 
+    # Ad-platform roles form an "at least one of" group rather than each being required.
+    _AD_ROLES = ("ad_spend_meta", "ad_spend_google", "ad_spend_tiktok")
+
     @property
     def missing_required(self) -> list[FileRequirement]:
         return [r for r in self.requirements if r.required and not r.found]
 
     @property
     def missing_optional(self) -> list[FileRequirement]:
-        return [r for r in self.requirements if not r.required and not r.found]
+        return [r for r in self.requirements
+                if not r.required and not r.found and r.role not in self._AD_ROLES]
+
+    @property
+    def ad_platform_present(self) -> bool:
+        return any(r.found for r in self.requirements if r.role in self._AD_ROLES)
 
     @property
     def is_ready(self) -> bool:
-        return self.inputs_dir_exists and not self.missing_required
+        return self.inputs_dir_exists and not self.missing_required and self.ad_platform_present
 
     def to_dict(self) -> dict:
         return {
@@ -57,10 +65,12 @@ class PreflightReport:
             "inputs_dir_exists": self.inputs_dir_exists,
             "files_scanned": self.files_scanned,
             "is_ready": self.is_ready,
+            "ad_platform_present": self.ad_platform_present,
             "summary": {
                 "present": sum(1 for r in self.requirements if r.found),
                 "missing_required": len(self.missing_required),
                 "missing_optional": len(self.missing_optional),
+                "ad_platform_present": self.ad_platform_present,
             },
             "requirements": [asdict(r) for r in self.requirements],
             "extras": self.extras,
@@ -72,22 +82,25 @@ def _spec() -> list[FileRequirement]:
     return [
         FileRequirement(
             role="shopify_daily",
-            label="Shopify Daily Sales (12 months)",
+            label="Total Sales Over Time (daily, last 365 days)",
             required=True,
-            description="Daily orders / gross sales / discounts / returns / tax / COGS for the 12-month lookback.",
+            description="Daily orders / gross sales / discounts / returns / tax / COGS for the 12-month lookback. Source of truth for monthly revenue and quarterly order counts.",
             source_system="Shopify Admin",
-            export_path_hint="Analytics → Reports → 'Total sales' → set date range to 'Last 12 months' → group by day → export CSV.",
-            accepted_patterns=["shopify_daily", "shopify-daily", "total_sales"],
+            export_path_hint="Analytics → Reports → Total Sales Over Time → time period = Last 365 Days → remove comparison → export CSV → save as 'Daily Mentor - Total Sales Over Time'.",
+            accepted_patterns=["total sales over time", "shopify_daily", "total_sales"],
             accepted_extensions=[".csv"],
         ),
         FileRequirement(
             role="nc_rc",
-            label="Gross Sales by New or Returning Customer",
+            label="NC vs RC, last 365 days (per quarter)",
             required=True,
-            description="Single-period split of orders, AOV, COGS by new vs returning customers.",
+            description="New vs returning split of gross sales, discounts, returns, shipping, tax, orders, AOV and COGS — broken out by quarter for the quarter-over-quarter NCCM.",
             source_system="Shopify Admin",
-            export_path_hint="Analytics → Reports → 'Gross sales by new or returning customer' → most recent period → export CSV.",
-            accepted_patterns=["gross sales by new or returning", "new_or_returning", "nc_rc"],
+            export_path_hint=("Analytics → custom report → New exploration → time period = Last 365 Days → "
+                              "Sidekick prompt: 'New exploration report for L365 days, New Customers vs Returning "
+                              "Customers, grouped by quarter, include gross sales, discounts, returns, shipping, tax, "
+                              "orders, average order value and COGS' → export CSV → save as 'Daily Mentor - NC v RC L365'."),
+            accepted_patterns=["nc v rc", "nc vs rc", "new or returning", "new vs returning"],
             accepted_extensions=[".csv"],
         ),
         FileRequirement(
@@ -96,19 +109,9 @@ def _spec() -> list[FileRequirement]:
             required=True,
             description="Online store visitors, sessions, conversion rate per month for the last 13 months.",
             source_system="Shopify Admin",
-            export_path_hint="Analytics → Reports → 'Sessions over time' → group by month → export CSV.",
-            accepted_patterns=["sessions by month", "sessions_by_month"],
+            export_path_hint="Analytics → Reports → Sessions → group by month → export CSV → save as 'Sessions by month'.",
+            accepted_patterns=["sessions by month", "sessions_by_month", "sessions"],
             accepted_extensions=[".csv"],
-        ),
-        FileRequirement(
-            role="xero_pl",
-            label="Xero Profit & Loss (12 months)",
-            required=True,
-            description="12-month monthly P&L with all expense accounts. Required even if sparse — the Atxn fallback uses this for chart-of-accounts seeding.",
-            source_system="Xero",
-            export_path_hint="Reports → Profit & Loss → date range = 'Last 12 months', columns = 'Months' → export XLSX.",
-            accepted_patterns=["profit_and_loss", "profit and loss"],
-            accepted_extensions=[".xlsx"],
         ),
         FileRequirement(
             role="xero_bs",
@@ -116,25 +119,38 @@ def _spec() -> list[FileRequirement]:
             required=True,
             description="Balance sheet snapshot for the As-At date plus prior months for trend.",
             source_system="Xero",
-            export_path_hint="Reports → Balance Sheet → 'Compare to' = last 12 periods → export XLSX.",
+            export_path_hint=("Reports → Balance Sheet → time period = This Month → Compare with → "
+                              "'Enter a Different Number' = 12 → Update → export Excel → save as 'Daily Mentor - Balance Sheet'."),
             accepted_patterns=["balance_sheet", "balance sheet"],
             accepted_extensions=[".xlsx"],
         ),
         FileRequirement(
             role="xero_atxn",
-            label="Xero Account Transactions (12 months)",
+            label="Xero Account Transactions (last 365 days, all accounts)",
             required=True,
-            description="Every transaction by account for the 12-month lookback. Drives vendor sub-rows and the COGS reconstruction when the P&L is thin.",
+            description="Every transaction by account for the 12-month lookback. Sole source for expense rows, COGS reconstruction, and vendor sub-rows (Credit−Debit netted).",
             source_system="Xero",
-            export_path_hint="Reports → Account Transactions → date range = 'Last 12 months' → 'All accounts' → export XLSX.",
+            export_path_hint=("Reports → Account Transactions → Accounts = Select All → time period = Custom, Last 365 Days → "
+                              "columns = Date, Contact, Description, Debit (AUD), Credit (AUD) → Update → export Excel → "
+                              "save as 'Daily Mentor - Account Transactions'."),
             accepted_patterns=["account_transactions", "account transactions"],
             accepted_extensions=[".xlsx"],
         ),
         FileRequirement(
+            role="xero_pl",
+            label="Xero Profit & Loss (optional — Account Transactions is the primary source)",
+            required=False,
+            description="Not needed when the full Account Transactions export is supplied — the P&L is reconstructed from transactions. If a clean bookkeeper-categorised P&L is provided, it takes precedence over the reconstruction.",
+            source_system="Xero",
+            export_path_hint="Reports → Profit & Loss → date range = 'Last 12 months', columns = 'Months' → export XLSX.",
+            accepted_patterns=["profit_and_loss", "profit and loss"],
+            accepted_extensions=[".xlsx"],
+        ),
+        FileRequirement(
             role="ad_spend_meta",
-            label="Meta (Facebook) Ad Spend",
-            required=True,
-            description="Daily spend per campaign for the 12-month lookback. Currency must appear in the column header (e.g. `Amount spent (NZD)`).",
+            label="Meta (Facebook) Ad Spend (12 months) — at least one ad platform required",
+            required=False,
+            description="Daily spend per campaign for the 12-month lookback. Currency must appear in the column header (e.g. `Amount spent (AUD)`). At minimum one of Meta / Google / TikTok is required.",
             source_system="Meta Ads Manager",
             export_path_hint="Ads Manager → Reports → Customise → columns = Day, Campaign name, Amount spent → date range last 12 months → export CSV.",
             accepted_patterns=["facebook_spend", "facebook spend", "meta_spend", "meta spend"],
@@ -233,9 +249,23 @@ def render_text_summary(report: PreflightReport) -> str:
             lines.append(f"      Source: {r.source_system}")
             lines.append(f"      How to export: {r.export_path_hint}")
     lines.append("")
+    mark = "✓" if report.ad_platform_present else "✗"
+    lines.append(f"AD SPEND ({mark} at least one platform required)")
+    for r in report.requirements:
+        if r.role not in PreflightReport._AD_ROLES:
+            continue
+        if r.found:
+            size_kb = (r.matched_size_bytes or 0) / 1024
+            lines.append(f"  ✓ {r.label.split(' —')[0]}")
+            lines.append(f"      {Path(r.matched_path).name}  ({size_kb:,.0f} KB)")
+        else:
+            lines.append(f"  · {r.label.split(' —')[0].split(' (optional')[0]}  — not provided")
+    if not report.ad_platform_present:
+        lines.append("      Provide at least one: Meta, Google, or TikTok daily spend (12 months).")
+    lines.append("")
     lines.append("OPTIONAL INPUTS")
     for r in report.requirements:
-        if r.required:
+        if r.required or r.role in PreflightReport._AD_ROLES:
             continue
         if r.found:
             size_kb = (r.matched_size_bytes or 0) / 1024
@@ -254,8 +284,13 @@ def render_text_summary(report: PreflightReport) -> str:
     if report.is_ready:
         lines.append("READY TO BUILD ✓")
     else:
+        problems = []
         n = len(report.missing_required)
-        lines.append(f"NOT READY — {n} required file{'s' if n != 1 else ''} missing.")
+        if n:
+            problems.append(f"{n} required file{'s' if n != 1 else ''} missing")
+        if not report.ad_platform_present:
+            problems.append("no ad-platform spend file")
+        lines.append("NOT READY — " + "; ".join(problems) + ".")
     return "\n".join(lines)
 
 

@@ -41,11 +41,15 @@ def _scan(inputs_dir: Path) -> dict[str, Path]:
     candidate_bs: list[Path] = []
     for name, path in files.items():
         lower = name.lower()
-        if "shopify_daily" in lower and lower.endswith(".csv"):
+        # Daily sales: 'Daily Mentor - Total Sales Over Time' (new) or legacy 'shopify_daily' / 'total_sales'.
+        if (("total sales over time" in lower or "shopify_daily" in lower or "total_sales" in lower)
+                and lower.endswith(".csv")):
             roles["shopify_daily"] = path
-        elif "gross sales by new or returning" in lower:
+        # NC vs RC: 'Daily Mentor - NC v RC L365' (new) or legacy 'gross sales by new or returning'.
+        elif ("nc v rc" in lower or "nc vs rc" in lower or "new or returning" in lower
+              or "new vs returning" in lower):
             roles["nc_rc"] = path
-        elif "sessions by month" in lower:
+        elif "sessions by month" in lower or ("sessions" in lower and lower.endswith(".csv")):
             roles["sessions"] = path
         elif "profit_and_loss" in lower and lower.endswith(".xlsx"):
             candidate_pl.append(path)
@@ -113,11 +117,27 @@ def _read_shopify_daily(path: Path) -> pd.DataFrame:
     return df.dropna(subset=["day"]).sort_values("day").reset_index(drop=True)
 
 
+def _quarter_of(d: date) -> str:
+    """Calendar quarter label, e.g. date(2026,2,1) -> 'Q1 2026'."""
+    q = (d.month - 1) // 3 + 1
+    return f"Q{q} {d.year}"
+
+
 def _read_nc_rc(path: Path) -> pd.DataFrame:
+    """New vs Returning customer split.
+
+    Now period-aware: the L365 export may carry a time dimension (a month, quarter,
+    or period-start column) so the NCCM can run quarter-over-quarter. When present,
+    each row is tagged with its calendar quarter. When absent (legacy single-aggregate
+    export), all rows fall under a single 'All' quarter and downstream code treats the
+    whole file as one period.
+    """
     df = pd.read_csv(path)
     df.columns = [c.strip().lstrip("﻿") for c in df.columns]
     rename = {
         "New or returning customer": "segment",
+        "New or returning": "segment",
+        "Customer type": "segment",
         "Gross sales": "gross",
         "Discounts": "discounts",
         "Returns": "returns",
@@ -126,11 +146,30 @@ def _read_nc_rc(path: Path) -> pd.DataFrame:
         "Orders": "orders",
         "Average order value": "aov",
         "Cost of goods sold": "cogs",
+        # possible period columns
+        "Month": "period",
+        "Quarter": "period",
+        "Week": "period",
+        "Day": "period",
+        "Date": "period",
+        "Period": "period",
     }
     df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
     for col in ("gross", "discounts", "returns", "shipping", "taxes", "orders", "aov", "cogs"):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+    # Derive calendar quarter from a period column if we found one.
+    if "period" in df.columns:
+        parsed = pd.to_datetime(df["period"], errors="coerce")
+        if parsed.notna().any():
+            df["period_date"] = parsed.dt.date
+            df["quarter"] = parsed.dt.date.map(lambda d: _quarter_of(d) if pd.notna(d) else "All")
+        else:
+            # period column held quarter labels like 'Q1 2026' already
+            df["quarter"] = df["period"].astype(str).str.strip()
+    else:
+        df["quarter"] = "All"
     return df
 
 

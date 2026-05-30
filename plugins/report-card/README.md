@@ -55,7 +55,7 @@ FX is resolved **at runtime** — there is no baked-in rate dictionary. When a s
 1. Homepage / Benchmark Scorecard
 2. Monthly P&L (8 sections, vendor sub-rows, 12-month total)
 3. Financial Position
-4. NCCM Calculator
+4. NCCM Calculator (quarter-over-quarter; needs the NC/RC export grouped by quarter)
 5. LTV Analysis (degrades when Cohort CSV absent)
 6. Final Report Card (Bleed/Fix + Ops benchmarks)
 7. Brand Profit Simulator

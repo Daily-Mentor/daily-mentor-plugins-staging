@@ -12,8 +12,8 @@
     {
       "name": "report-card",
       "source": "./plugins/report-card",
-      "description": "Generate a 12-tab e-commerce diagnostic Report Card (HTML + xlsx) from a standardised 7-file input pack.",
-      "version": "0.1.0",
+      "description": "Generate a 12-tab e-commerce diagnostic Report Card (HTML + xlsx) from a standardised input pack. Brand- and currency-neutral; quarter-over-quarter NCCM.",
+      "version": "0.2.0",
       "category": "analytics",
       "keywords": ["ecommerce", "shopify", "xero", "diagnostics", "mentorship"]
     }

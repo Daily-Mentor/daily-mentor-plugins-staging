@@ -66,14 +66,29 @@ def write_pack(out_dir: Path, end: date | None = None) -> Path:
             units = orders + 1
             w.writerow([day.isoformat(), orders, gross, disc, ret, net, ship, 0, 0, tax, total, cogs, units])
 
-    # ---- NC/RC ----
-    ncrc_path = out_dir / "Gross sales by new or returning customer - 2026-05-20.csv"
+    # ---- NC/RC (per quarter — drives quarter-over-quarter NCCM) ----
+    ncrc_path = out_dir / "Daily Mentor - NC v RC L365.csv"
     with ncrc_path.open("w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["New or returning customer", "Gross sales", "Discounts", "Returns",
+        w.writerow(["Quarter", "New or returning customer", "Gross sales", "Discounts", "Returns",
                     "Shipping charges", "Taxes", "Orders", "Average order value", "Cost of goods sold"])
-        w.writerow(["New", 38000.0, -1900.0, -380.0, 0, 4180.0, 300, 126.33, 12160.0])
-        w.writerow(["Returning", 9000.0, -450.0, -90.0, 0, 990.0, 80, 105.50, 2880.0])
+        # Four calendar quarters across the lookback, gently varying.
+        ncrc_quarters = [
+            ("2025-07-01", 8800, 70, 2800),   # Q3 2025
+            ("2025-10-01", 9500, 76, 3040),   # Q4 2025
+            ("2026-01-01", 10200, 82, 3260),  # Q1 2026
+            ("2026-04-01", 9600, 78, 3070),   # Q2 2026 (partial)
+        ]
+        for qstart, nc_gross, nc_orders, nc_cogs in ncrc_quarters:
+            disc = round(-nc_gross * 0.05, 2)
+            ret = round(-nc_gross * 0.01, 2)
+            tax = round(nc_gross * 0.11, 2)
+            aov = round((nc_gross + disc + tax) / nc_orders, 2)
+            w.writerow([qstart, "New", nc_gross, disc, ret, 0, tax, nc_orders, aov, nc_cogs])
+            # Returning ~25% of new volume
+            rg = round(nc_gross * 0.25, 2)
+            w.writerow([qstart, "Returning", rg, round(-rg * 0.05, 2), round(-rg * 0.01, 2),
+                        0, round(rg * 0.11, 2), int(nc_orders * 0.27), round(aov * 0.84, 2), round(nc_cogs * 0.25, 2)])
 
     # ---- Sessions ----
     sess_path = out_dir / "Sessions by month - 2026-05-20.csv"

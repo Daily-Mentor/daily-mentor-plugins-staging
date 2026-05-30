@@ -48,24 +48,30 @@ Ask them to either:
 
 Once they've added files, re-run the pre-flight JSON command to confirm. Loop until `is_ready: true`.
 
-### Optional inputs
+### Ad-platform group + optional inputs
 
-For each entry where `required: false` and `found: false`, mention it briefly and note what tab degrades without it (LTV tab needs the Shopify Cohort Analysis CSV; Google/TikTok ad spend supplements the Meta CSV). Do not block — these are nice-to-have.
+Ad spend is an **at-least-one** group: the build needs Meta **or** Google **or** TikTok (more is better — all present platforms are summed). `preflight-json` exposes `ad_platform_present`; if false, ask for at least one platform's 12-month daily spend.
+
+Other optional inputs (`required: false`, `found: false`): mention briefly and note what degrades. The **P&L is optional** — Account Transactions is the primary expense source and the P&L is reconstructed from it; supply a clean P&L only if you want the bookkeeper's categorisation to take precedence. The **Cohort CSV** unlocks the LTV tab. Do not block on these.
 
 ## The input pack (brand-neutral spec)
 
-| Role | File pattern | Required | Source |
+All exports cover the last 365 days. Client name is inferred from the Xero filenames.
+
+| Role | File pattern | Required | Source & export |
 |---|---|---|---|
-| `shopify_daily` | `shopify_daily_*.csv` | yes | Shopify → Analytics → Total Sales (daily) |
-| `nc_rc` | `Gross sales by new or returning customer*.csv` | yes | Shopify → Analytics → NC/RC report |
-| `sessions` | `Sessions by month*.csv` | yes | Shopify → Analytics → Sessions |
-| `xero_pl` | `*_Profit_and_Loss.xlsx` | yes | Xero → Reports → P&L (12-month, monthly columns) |
-| `xero_bs` | `*_Balance_Sheet.xlsx` | yes | Xero → Reports → Balance Sheet |
-| `xero_atxn` | `*_Account_Transactions.xlsx` | yes | Xero → Reports → Account Transactions (12-month, all accounts) |
-| `ad_spend_meta` | `*facebook*spend*.{csv,xlsx}` | yes | Meta Ads Manager → daily spend by campaign |
-| `ad_spend_google` | `*google*spend*.{csv,xlsx}` | optional | Google Ads → daily report |
-| `ad_spend_tiktok` | `*tiktok*spend*.{csv,xlsx}` | optional | TikTok Ads Manager → daily report |
+| `shopify_daily` | `*Total Sales Over Time*.csv` | yes | Shopify → Analytics → Total Sales Over Time → Last 365 Days → remove comparison → CSV |
+| `nc_rc` | `*NC v RC*.csv` | yes | Shopify → custom report (New exploration), L365, **grouped by quarter**, fields: gross/discounts/returns/shipping/tax/orders/AOV/COGS |
+| `sessions` | `Sessions by month*.csv` | yes | Shopify → Analytics → Sessions → by month |
+| `xero_bs` | `*_Balance_Sheet.xlsx` | yes | Xero → Balance Sheet → This Month, Compare with 12 → Excel |
+| `xero_atxn` | `*_Account_Transactions.xlsx` | yes | Xero → Account Transactions → all accounts, L365, columns Date/Contact/Description/Debit/Credit → Excel |
+| `ad_spend_meta` | `*facebook*spend*.{csv,xlsx}` | one-of | Meta Ads Manager → daily spend by campaign (12 months) |
+| `ad_spend_google` | `*google*spend*.{csv,xlsx}` | one-of | Google Ads → daily report |
+| `ad_spend_tiktok` | `*tiktok*spend*.{csv,xlsx}` | one-of | TikTok Ads Manager → daily report |
+| `xero_pl` | `*_Profit_and_Loss.xlsx` | optional | Xero → P&L (only if a clean categorised P&L should override the Atxn reconstruction) |
 | `cohort` | `*cohort*.csv` | optional | Shopify → Customer Cohort Analysis (unlocks LTV tab) |
+
+The **NCCM tab runs quarter-over-quarter** — it needs the NC/RC export grouped by quarter. Without a quarter dimension it falls back to a single blended period and flags this in a banner.
 
 ## Pipeline (single pass after preflight clears)
 

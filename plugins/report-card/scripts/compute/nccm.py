@@ -1,12 +1,17 @@
-"""NCCM Calculator — per-order contribution margin for new customers.
+"""NCCM Calculator — New Customer Contribution Margin, quarter over quarter.
 
-Four columns: Item | Per Order | % of AOV | Notes.
-Notes column surfaces the derivation on-page (where the value comes from) instead of
-relying on hover-only tooltips — useful when the workbook is printed or used offline.
+Layout: metrics run down the rows; each calendar quarter is a column, plus a
+trailing Notes column explaining each metric's derivation.
+
+Per-quarter inputs (NC AOV, orders, COGS) come from that quarter's New-customer
+rows in the NC/RC export. CAC is genuinely quarterly: quarter ad spend (from the
+daily ad-platform data, windowed to the calendar quarter) ÷ that quarter's NC
+orders. Operational fee lines use mentor defaults applied to each quarter's AOV.
 """
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 from ..models import Banner, RenderTree, Tooltip
@@ -14,6 +19,35 @@ from .helpers import make_row, money_cell, pct_cell, safe_div, section_cell, tex
 
 
 _DEFAULTS_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "defaults.json"
+
+
+def _quarter_sort_key(label: str) -> tuple[int, int]:
+    """'Q1 2026' -> (2026, 1). 'All' sorts last."""
+    try:
+        q, y = label.split()
+        return (int(y), int(q.lstrip("Qq")))
+    except Exception:
+        return (9999, 9)
+
+
+def _quarter_window(label: str) -> tuple[date, date] | None:
+    """Calendar-quarter date span for an ad-spend window. 'Q2 2026' -> (Apr 1, Jun 30)."""
+    try:
+        q, y = label.split()
+        qi = int(q.lstrip("Qq")); yr = int(y)
+        start_month = (qi - 1) * 3 + 1
+        start = date(yr, start_month, 1)
+        end_month = start_month + 2
+        # last day of end_month
+        if end_month == 12:
+            end = date(yr, 12, 31)
+        else:
+            end = date(yr, end_month + 1, 1).replace(day=1)
+            from datetime import timedelta
+            end = end - timedelta(days=1)
+        return start, end
+    except Exception:
+        return None
 
 
 def compute(bundle) -> RenderTree:
@@ -24,175 +58,152 @@ def compute(bundle) -> RenderTree:
         defaults = json.load(f)["nccm"]
 
     tree = RenderTree(tab_id="nccm", title="NCCM Calculator",
-                      subtitle="New Customer Contribution Margin — per order. Run this by region if selling in multiple.")
+                      subtitle="New Customer Contribution Margin — quarter over quarter. Run by region if selling in multiple.")
 
     nc_src = Path(meta.files_found.get("nc_rc", "")).name
-    ads_src = Path(meta.files_found.get("ad_spend_meta", "")).name
-    xero_src = Path(meta.files_found.get("xero_pl", "")).name
+    ads_src = Path(meta.files_found.get("ad_spend_meta", "")).name or "ad-platform CSVs"
 
     if nc_rc is None or nc_rc.empty:
         tree.banners.append(Banner(severity="error", text="NC/RC report missing — cannot compute NCCM."))
         return tree
 
-    nc = nc_rc[nc_rc["segment"].str.lower() == "new"].iloc[0]
-    nc_orders = int(nc["orders"])
-    nc_gross = float(nc["gross"])
-    nc_disc = float(nc["discounts"])
-    nc_ship = float(nc["shipping"])
-    nc_tax = float(nc["taxes"])
-    nc_cogs = float(nc["cogs"])
-
-    nc_perf = nc_gross + nc_disc + nc_ship + nc_tax
-    nc_aov = safe_div(nc_perf, nc_orders)
-    tax_dollars = safe_div(nc_tax, nc_orders)
-    tax_rate = safe_div(nc_tax, nc_perf - nc_tax) if (nc_perf - nc_tax) else None
-
-    # Per-order COGS (product only from Shopify)
-    cogs_per_order_product = safe_div(nc_cogs, nc_orders)
-    cogs_pct_of_aov = safe_div(cogs_per_order_product, nc_aov)
-
-    # Defaults
+    # Defaults (mentor)
     pp_pct = defaults["payment_processing_pct"]
     smarkets_pct = defaults["shopify_markets_fee_pct"]
     txn_fee = defaults["transaction_fee_per_order_aud"]
     packaging = defaults["packaging_per_order_aud"]
     fulfillment = defaults["fulfillment_per_order_aud"]
 
-    # Try to derive from Xero where possible
-    # Shipping per order: prefer Xero Freight (posted-month sum) / total orders in that window
-    shipping_per_order = None
-    shipping_note = "Default — Xero Freight data not available."
-    freight_q = 0.0
-    if not d.monthly_expenses.empty and d.posted_months:
-        freight_rows = d.monthly_expenses[
-            d.monthly_expenses["account_lower"].str.contains("freight|courier|warehouse|fulfilment|fulfillment", regex=True, na=False)
-        ]
-        if not freight_rows.empty:
-            freight_q = float(freight_rows["value"].abs().sum())
-            posted_months_ct = len(d.posted_months)
-            if posted_months_ct > 0:
-                # estimate per-order over the same window: use NC orders pro-rated; if 30d NC/RC, scale to posted months
-                # Easier: freight per month / orders per month (from Shopify daily)
-                if not d.monthly_revenue_components.empty and "orders" in d.monthly_revenue_components.columns:
-                    monthly_orders = d.monthly_revenue_components[
-                        d.monthly_revenue_components["month"].isin(d.posted_months)
-                    ]["orders"].sum()
-                    if monthly_orders > 0:
-                        shipping_per_order = freight_q / monthly_orders
-                        shipping_note = f"Derived: Xero Freight {freight_q:,.0f} / {int(monthly_orders)} orders over posted months."
+    # Which quarters do we have NC rows for?
+    have_quarter_col = "quarter" in nc_rc.columns
+    new_rows = nc_rc[nc_rc["segment"].str.lower() == "new"].copy()
+    if new_rows.empty:
+        tree.banners.append(Banner(severity="error", text="NC/RC export has no 'New' customer rows."))
+        return tree
 
-    if shipping_per_order is None:
-        shipping_per_order = 0.0
-        shipping_note = "Default 0 — request Xero Freight & Courier data."
+    quarters = sorted(new_rows["quarter"].astype(str).unique().tolist(), key=_quarter_sort_key)
+    single_period = (quarters == ["All"]) or not have_quarter_col
 
-    pp_dollar = nc_aov * pp_pct if nc_aov else None
-    smarkets_dollar = nc_aov * smarkets_pct if nc_aov else None
-    total_op_cost = sum(filter(None, [cogs_per_order_product, pp_dollar, smarkets_dollar, txn_fee, shipping_per_order, packaging, fulfillment]))
-    total_pct = safe_div(total_op_cost, nc_aov)
+    # ---- Per-quarter computation ----
+    def compute_quarter(qlabel: str) -> dict:
+        rows = new_rows[new_rows["quarter"].astype(str) == qlabel]
+        if rows.empty:
+            return {}
+        nc = rows.iloc[0]
+        nc_orders = int(nc.get("orders", 0) or 0)
+        nc_gross = float(nc.get("gross", 0) or 0)
+        nc_disc = float(nc.get("discounts", 0) or 0)
+        nc_ship = float(nc.get("shipping", 0) or 0)
+        nc_tax = float(nc.get("taxes", 0) or 0)
+        nc_cogs = float(nc.get("cogs", 0) or 0)
+        nc_perf = nc_gross + nc_disc + nc_ship + nc_tax
+        aov = safe_div(nc_perf, nc_orders)
 
-    # CAC
-    ad_total_window = 0.0
-    if not d.daily_ad_spend.empty and d.snapshot_window:
-        mask = (d.daily_ad_spend["day"] >= d.snapshot_window[0]) & (d.daily_ad_spend["day"] <= d.snapshot_window[1])
-        ad_total_window = float(d.daily_ad_spend.loc[mask, "amount"].sum())
-    cac = safe_div(ad_total_window, nc_orders) if nc_orders else None
-    cac_pct = safe_div(cac, nc_aov)
+        cogs_po = safe_div(nc_cogs, nc_orders)
+        pp_dollar = aov * pp_pct if aov else None
+        sm_dollar = aov * smarkets_pct if aov else None
+        op_cost = sum(filter(None, [cogs_po, pp_dollar, sm_dollar, txn_fee, packaging, fulfillment]))
+        gp_po = (aov - op_cost) if (aov is not None) else None
 
-    gp_per_order = (nc_aov - total_op_cost) if (nc_aov is not None and total_op_cost is not None) else None
-    gp_pct = safe_div(gp_per_order, nc_aov)
-    fcm = (gp_per_order - cac) if (gp_per_order is not None and cac is not None) else None
-    fcm_pct = safe_div(fcm, nc_aov)
+        # Quarter ad spend → CAC
+        ad_q = 0.0
+        win = _quarter_window(qlabel) if not single_period else d.snapshot_window
+        if not d.daily_ad_spend.empty and win:
+            mask = (d.daily_ad_spend["day"] >= win[0]) & (d.daily_ad_spend["day"] <= win[1])
+            ad_q = float(d.daily_ad_spend.loc[mask, "amount"].sum())
+        cac = safe_div(ad_q, nc_orders) if nc_orders else None
+        fcm = (gp_po - cac) if (gp_po is not None and cac is not None) else None
 
-    tree.columns = ["Item", "Per Order", "% of AOV", "Notes"]
+        return {
+            "orders": nc_orders, "aov": aov, "tax_po": safe_div(nc_tax, nc_orders),
+            "cogs_po": cogs_po, "pp": pp_dollar, "sm": sm_dollar, "txn": txn_fee,
+            "pack": packaging, "ful": fulfillment, "op_cost": op_cost,
+            "gp_po": gp_po, "ad_q": ad_q, "cac": cac, "fcm": fcm,
+            "nc_perf": nc_perf, "nc_cogs": nc_cogs,
+        }
 
-    def line(name, dollar, pct, tooltip, note, *, indent=1, bold=False, is_total=False):
-        return make_row([
-            text_cell(f"nccm.{name}.lbl", name, indent=indent, bold=bold),
-            money_cell(f"nccm.{name}.v", dollar, tooltip=tooltip, decimals=2, is_total=is_total),
-            pct_cell(f"nccm.{name}.p", pct, tooltip=tooltip),
-            text_cell(f"nccm.{name}.n", note),
-        ])
+    qdata = {q: compute_quarter(q) for q in quarters}
+    qdata = {q: v for q, v in qdata.items() if v}
+    quarters = [q for q in quarters if q in qdata]
+    if not quarters:
+        tree.banners.append(Banner(severity="error", text="No quarters with NC data could be computed."))
+        return tree
 
-    # ---- Inputs ----
-    tree.rows.append(make_row([section_cell("nccm.s1", "INPUTS"), text_cell("nccm.s1.b", ""), text_cell("nccm.s1.c", ""), text_cell("nccm.s1.d", "")], is_section=True))
-    tree.rows.append(line("NC AOV", nc_aov, None,
-        Tooltip(formula="(Gross + Discounts + Shipping + Tax) / Orders",
-                inputs=[("Gross", nc_gross), ("Disc", nc_disc), ("Ship", nc_ship), ("Tax", nc_tax), ("Orders", nc_orders)],
-                result_expr=f"= {nc_aov:,.2f}" if nc_aov else "—",
-                sources=[nc_src], gotcha_refs=["G36"]),
-        "Inclusive of tax — per Daily Mentor NCCM convention.",
-        bold=True))
-    tree.rows.append(line("  Tax per order", tax_dollars, tax_rate,
-        Tooltip(formula="Tax / Orders", sources=[nc_src]),
-        f"Effective tax rate {tax_rate*100:.1f}% on post-tax AOV." if tax_rate else "—",
-        indent=2))
+    col_labels = ["This period" if single_period else q for q in quarters]
+    tree.columns = ["Metric"] + col_labels + ["Notes"]
+    ncol = len(quarters)
 
-    # ---- Operational Cost per Order ----
-    tree.rows.append(make_row([section_cell("nccm.s2", "OPERATIONAL COST PER ORDER"), text_cell("nccm.s2.b", ""), text_cell("nccm.s2.c", ""), text_cell("nccm.s2.d", "")], is_section=True))
-    tree.rows.append(line("Product COGS (Shopify per-sale)", cogs_per_order_product, cogs_pct_of_aov,
-        Tooltip(formula="NC COGS / NC Orders",
-                inputs=[("NC COGS", nc_cogs), ("NC Orders", nc_orders)],
-                result_expr=f"{nc_cogs:,.2f} / {nc_orders} = {cogs_per_order_product:,.2f}" if cogs_per_order_product else "—",
-                sources=[nc_src], gotcha_refs=["G39"]),
-        f"Shopify per-sale product cost. Landed COGS (Freight, Warehouse) charged below."))
-    tree.rows.append(line("Payment Processing", pp_dollar, pp_pct,
-        Tooltip(formula="AOV × Payment Processing %", sources=["defaults.json"]),
-        f"Default {pp_pct*100:.1f}%. Override per client when known."))
-    tree.rows.append(line("Shopify Markets Fee", smarkets_dollar, smarkets_pct,
-        Tooltip(formula="AOV × Shopify Markets %", sources=["defaults.json"]),
-        f"Default {smarkets_pct*100:.1f}%. 0% if not selling cross-border."))
-    tree.rows.append(line("Transaction Fees", txn_fee, safe_div(txn_fee, nc_aov),
-        Tooltip(formula="Per-order flat fee", sources=["defaults.json"]),
+    def metric_row(key, label, getter, fmt="money", note="", *, indent=1, bold=False, is_total=False, tip_formula=""):
+        cells = [text_cell(f"nccm.{key}.lbl", label, indent=indent, bold=bold)]
+        for i, q in enumerate(quarters):
+            v = getter(qdata[q])
+            tip = Tooltip(formula=tip_formula or label, sources=[nc_src], result_expr=(f"{v:,.2f}" if isinstance(v, (int, float)) and v is not None else "—"))
+            if fmt == "money":
+                cells.append(money_cell(f"nccm.{key}.{i}", v, tooltip=tip, decimals=2, is_total=is_total))
+            elif fmt == "pct":
+                cells.append(pct_cell(f"nccm.{key}.{i}", v, tooltip=tip))
+            else:
+                cells.append(text_cell(f"nccm.{key}.{i}", f"{int(v):,}" if v is not None else "—"))
+        cells.append(text_cell(f"nccm.{key}.note", note))
+        return make_row(cells, is_total=is_total)
+
+    def section(key, title):
+        return make_row([section_cell(f"nccm.{key}", title)]
+                        + [text_cell(f"nccm.{key}.{i}", "") for i in range(ncol + 1)], is_section=True)
+
+    # ---- INPUTS ----
+    tree.rows.append(section("s1", "INPUTS"))
+    tree.rows.append(metric_row("aov", "NC AOV", lambda v: v["aov"], "money",
+        "Inclusive of tax (Daily Mentor convention). (Gross + Discounts + Shipping + Tax) / Orders.",
+        bold=True, tip_formula="(Gross + Discounts + Shipping + Tax) / NC Orders"))
+    tree.rows.append(metric_row("orders", "NC Orders", lambda v: v["orders"], "int",
+        "New-customer orders in the quarter (from the NC/RC export)."))
+    tree.rows.append(metric_row("tax", "Tax per order", lambda v: v["tax_po"], "money",
+        "Tax collected / NC orders.", indent=2))
+
+    # ---- OPERATIONAL COST PER ORDER ----
+    tree.rows.append(section("s2", "OPERATIONAL COST PER ORDER"))
+    tree.rows.append(metric_row("cogs", "Product COGS (Shopify per-sale)", lambda v: v["cogs_po"], "money",
+        "NC COGS / NC orders. Landed costs (Freight, Warehouse) sit in the lines below."))
+    tree.rows.append(metric_row("pp", "Payment Processing", lambda v: v["pp"], "money",
+        f"Default {pp_pct*100:.1f}% of AOV. Override per client when known."))
+    tree.rows.append(metric_row("sm", "Shopify Markets Fee", lambda v: v["sm"], "money",
+        f"Default {smarkets_pct*100:.1f}% of AOV. 0% if not selling cross-border."))
+    tree.rows.append(metric_row("txn", "Transaction Fees", lambda v: v["txn"], "money",
         f"Default ${txn_fee:.2f}/order. Replace with Xero 'Shopify & PayPal fees' / orders when available."))
-    tree.rows.append(line("Shipping per order (landed)", shipping_per_order, safe_div(shipping_per_order, nc_aov),
-        Tooltip(formula="Xero Freight & Courier (posted months) / orders over same window",
-                inputs=[("Freight (posted)", freight_q)],
-                sources=[xero_src], gotcha_refs=["G39"]),
-        shipping_note))
-    tree.rows.append(line("Packaging + supplies", packaging, safe_div(packaging, nc_aov),
-        Tooltip(formula="Per-order flat", sources=["defaults.json"]),
-        f"Default ${packaging:.2f}/order. Avg cost of box, tape, inserts."))
-    tree.rows.append(line("Fulfilment (3PL)", fulfillment, safe_div(fulfillment, nc_aov),
-        Tooltip(formula="Per-order flat (3PL)", sources=["defaults.json"]),
-        f"Default ${fulfillment:.2f}/order. Replace with Xero 'Warehouse' or 3PL invoice / orders when available."))
-    tree.rows.append(line("Total Operational Cost", total_op_cost, total_pct,
-        Tooltip(formula="Sum of all operational cost lines above.",
-                result_expr=f"= {total_op_cost:,.2f} ({total_pct*100:.1f}%)" if total_op_cost else "—"),
-        "Sum of the lines above.",
-        bold=True, is_total=True))
+    tree.rows.append(metric_row("pack", "Packaging + supplies", lambda v: v["pack"], "money",
+        f"Default ${packaging:.2f}/order. Box, tape, inserts."))
+    tree.rows.append(metric_row("ful", "Fulfilment (3PL)", lambda v: v["ful"], "money",
+        f"Default ${fulfillment:.2f}/order. Replace with Xero 'Warehouse' / 3PL invoice / orders."))
+    tree.rows.append(metric_row("opcost", "Total Operational Cost", lambda v: v["op_cost"], "money",
+        "Sum of the operational lines above.", bold=True, is_total=True))
 
-    # ---- Margin ----
-    tree.rows.append(make_row([section_cell("nccm.s3", "MARGIN"), text_cell("nccm.s3.b", ""), text_cell("nccm.s3.c", ""), text_cell("nccm.s3.d", "")], is_section=True))
-    tree.rows.append(line("Gross Profit per Order", gp_per_order, gp_pct,
-        Tooltip(formula="AOV − Total Operational Cost",
-                inputs=[("AOV", nc_aov), ("OpCost", total_op_cost)],
-                result_expr=f"{nc_aov:,.2f} − {total_op_cost:,.2f} = {gp_per_order:,.2f}" if gp_per_order else "—"),
-        "AOV minus all operational lines.",
-        bold=True))
-    tree.rows.append(line("CAC", cac, cac_pct,
-        Tooltip(formula="Ad Spend (window) / NC Orders",
-                inputs=[("Ad Spend", ad_total_window), ("NC Orders", nc_orders)],
-                result_expr=f"{ad_total_window:,.2f} / {nc_orders} = {cac:,.2f}" if cac else "—",
-                sources=[ads_src], gotcha_refs=["G39"]),
-        f"Snapshot-period ad spend / NC orders."))
-    tree.rows.append(line("First-Order Contribution Margin", fcm, fcm_pct,
-        Tooltip(formula="Gross Profit per Order − CAC",
-                result_expr=f"{gp_per_order:,.2f} − {cac:,.2f} = {fcm:,.2f}" if fcm else "—"),
-        "Money kept per new customer after their first purchase.",
-        bold=True, is_total=True))
+    # ---- MARGIN ----
+    tree.rows.append(section("s3", "MARGIN"))
+    tree.rows.append(metric_row("gp", "Gross Profit per Order", lambda v: v["gp_po"], "money",
+        "AOV − Total Operational Cost.", bold=True, tip_formula="AOV − Total Operational Cost"))
+    tree.rows.append(metric_row("adq", "Ad Spend (quarter)", lambda v: v["ad_q"], "money",
+        "Total ad-platform spend in the calendar quarter (×FX).", indent=2))
+    tree.rows.append(metric_row("cac", "CAC", lambda v: v["cac"], "money",
+        "Quarter ad spend / NC orders for the same quarter.", tip_formula="Quarter Ad Spend / NC Orders"))
+    tree.rows.append(metric_row("fcm", "First-Order Contribution Margin", lambda v: v["fcm"], "money",
+        "Gross Profit per Order − CAC. Positive = acquisition profitable on order one.",
+        bold=True, is_total=True, tip_formula="Gross Profit per Order − CAC"))
 
-    # Banners
-    if d.snapshot_window:
-        period_days = (d.snapshot_window[1] - d.snapshot_window[0]).days + 1
-        if period_days < 85:
-            tree.banners.append(Banner(severity="warning",
-                text=f"NCCM based on a {period_days}-day NC/RC period (spec is 90 days). Numbers will move as more months accumulate."))
+    # ---- Banners ----
+    if single_period:
+        tree.banners.append(Banner(severity="warning",
+            text="NC/RC export has no quarter dimension — NCCM shows a single blended period. Re-export 'NC v RC L365' grouped by quarter to unlock quarter-over-quarter."))
+    else:
+        tree.banners.append(Banner(severity="info",
+            text=f"Quarter-over-quarter across {len(quarters)} calendar quarter(s). CAC uses each quarter's ad spend ÷ that quarter's NC orders; per-order fees use mentor defaults applied to each quarter's AOV."))
     tree.banners.append(Banner(severity="info",
         text="Operational lines marked 'default' should be replaced with client-specific data: Xero 'Shopify & PayPal fees', 'Freight & Courier', 'Warehouse' / 3PL invoices, packaging supplier rate card."))
 
     tree.notes = [
-        "Per-region: if the brand sells AU + NZ + US, build a separate NCCM per region — unit economics differ markedly.",
-        "AOV here is inclusive of tax — Daily Mentor convention. Operational cost ratios are expressed against this gross-of-tax AOV.",
-        "First-Order CM is the money kept per new customer on their first purchase. Positive = customer acquisition is profitable on transaction one; negative = repeat-purchase economics must carry the brand.",
+        "Per-region: if the brand sells across regions (AU + NZ + US), build a separate NCCM per region — unit economics differ markedly.",
+        "AOV is inclusive of tax (Daily Mentor convention); operational cost ratios are expressed against this gross-of-tax AOV.",
+        "First-Order CM is the money kept per new customer on their first purchase. Negative means repeat-purchase economics must carry the brand.",
+        "Partial calendar quarters at the edges of the 12-month window will show fewer orders — read trend, not absolute level, on those.",
     ]
     return tree

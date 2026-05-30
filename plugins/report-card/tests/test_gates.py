@@ -93,15 +93,56 @@ def test_gate2_preflight_blocks_when_incomplete(tmp_path):
     empty.mkdir()
     report = preflight(empty)
     assert report.is_ready is False
-    assert len(report.missing_required) == 7  # all required inputs absent
+    # 5 hard-required files (shopify_daily, nc_rc, sessions, xero_bs, xero_atxn);
+    # P&L is optional and ad spend is an "at least one" group.
+    assert len(report.missing_required) == 5
+    assert report.ad_platform_present is False
 
 
 def test_gate2_preflight_ready_when_complete(synthetic_inputs):
     report = preflight(synthetic_inputs)
     assert report.is_ready is True
     assert report.missing_required == []
-    # Optional inputs are surfaced but don't block.
-    assert len(report.missing_optional) >= 1
+
+
+def test_gate2_pnl_is_optional(synthetic_inputs, tmp_path):
+    """The P&L is not required when Account Transactions is supplied; build still succeeds."""
+    import shutil
+    pack = tmp_path / "no-pnl"
+    pack.mkdir()
+    for p in synthetic_inputs.iterdir():
+        if "profit_and_loss" in p.name.lower():
+            continue
+        shutil.copy(p, pack / p.name)
+    report = preflight(pack)
+    assert report.is_ready is True, "Build must be ready without a P&L file."
+    out = tmp_path / "out"
+    rc = cli_main([str(pack), str(out), "--reporting-currency", "GBP", "--run-date", "2026-05-30"])
+    assert rc in (0, 1)
+    assert (out / "report-card-2026-05-30.html").exists()
+
+
+def test_gate2_requires_at_least_one_ad_platform(synthetic_inputs, tmp_path):
+    import shutil
+    pack = tmp_path / "no-ads"
+    pack.mkdir()
+    for p in synthetic_inputs.iterdir():
+        if "spend" in p.name.lower() or "facebook" in p.name.lower():
+            continue
+        shutil.copy(p, pack / p.name)
+    report = preflight(pack)
+    assert report.ad_platform_present is False
+    assert report.is_ready is False
+
+
+def test_gate_nccm_is_quarter_over_quarter(synthetic_inputs, tmp_path):
+    """NCCM renders one column per calendar quarter, not a single snapshot."""
+    out = tmp_path / "out"
+    cli_main([str(synthetic_inputs), str(out), "--reporting-currency", "GBP", "--run-date", "2026-05-30"])
+    html = (out / "report-card-2026-05-30.html").read_text()
+    # The synthetic pack spans Q3 2025 → Q2 2026.
+    quarters_present = [q for q in ("Q3 2025", "Q4 2025", "Q1 2026", "Q2 2026") if q in html]
+    assert len(quarters_present) >= 3, f"Expected multiple quarter columns, found {quarters_present}"
 
 
 def test_gate2_cli_refuses_build_when_incomplete(tmp_path):
