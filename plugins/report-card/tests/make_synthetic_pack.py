@@ -39,7 +39,7 @@ def _daterange(start: date, end: date):
         cur += timedelta(days=1)
 
 
-def write_pack(out_dir: Path, end: date | None = None) -> Path:
+def write_pack(out_dir: Path, end: date | None = None, with_cohort: bool = True) -> Path:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     end = end or date(2026, 5, 20)
@@ -165,6 +165,24 @@ def write_pack(out_dir: Path, end: date | None = None) -> Path:
                 r += 1
         r += 1
     wb.save(atxn_path)
+
+    # ---- Shopify Cohort Analysis (wide: cohort x months-since) ----
+    if with_cohort:
+        cohort_path = out_dir / "Daily Mentor - Cohort Analysis customer value by month.csv"
+        with cohort_path.open("w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["Cohort", "Customers", "Month 0", "Month 1", "Month 2", "Month 3", "Month 4", "Month 5"])
+            # Cumulative customer value climbing over months-since-acquisition.
+            cohort_rows = [
+                ("Dec 2025", 120, 46.0, 52.0, 61.0, 67.0, 72.0, 76.0),
+                ("Jan 2026", 138, 47.5, 54.0, 62.5, 69.0, 74.0, None),
+                ("Feb 2026", 152, 48.0, 55.5, 64.0, 70.5, None, None),
+                ("Mar 2026", 165, 49.0, 57.0, 66.0, None, None, None),
+                ("Apr 2026", 149, 48.5, 56.0, None, None, None, None),
+                ("May 2026", 158, 47.0, None, None, None, None, None),
+            ]
+            for label, custs, *vals in cohort_rows:
+                w.writerow([label, custs] + ["" if v is None else v for v in vals])
 
     return out_dir
 

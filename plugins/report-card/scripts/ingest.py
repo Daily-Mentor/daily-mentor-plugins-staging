@@ -173,6 +173,95 @@ def _read_nc_rc(path: Path) -> pd.DataFrame:
     return df
 
 
+_MONTH_OFFSET_RE = re.compile(r"(?:month|period|m)\s*\.?\s*(\d+)", re.IGNORECASE)
+
+
+def _read_cohort(path: Path) -> pd.DataFrame | None:
+    """Normalise a Shopify Cohort Analysis 'Customer value by month' export into a
+    tidy frame: columns [cohort, month_offset, value].
+
+    Tolerant of two common layouts:
+
+      WIDE  — one row per acquisition cohort, a column per month-since-acquisition:
+              Cohort, Customers, Month 0, Month 1, Month 2, ...
+      LONG  — one row per (cohort, month-offset):
+              Cohort month, Months since first purchase, Amount spent per customer
+
+    `value` is the cumulative customer value at that month-offset (Shopify reports
+    cumulative spend per customer for this report type). Returns None if the file
+    can't be coerced into a recognised shape.
+    """
+    try:
+        raw = pd.read_csv(path)
+    except Exception:
+        return None
+    if raw.empty:
+        return None
+    raw.columns = [str(c).strip().lstrip("﻿") for c in raw.columns]
+
+    # Identify a cohort-label column (first textual/date column that isn't a count).
+    cohort_col = None
+    for cand in ("Cohort", "Cohort month", "Customer cohort", "Cohort period", "Month", "First order month", "Acquisition month"):
+        for col in raw.columns:
+            if col.strip().lower() == cand.strip().lower():
+                cohort_col = col
+                break
+        if cohort_col:
+            break
+    if cohort_col is None:
+        cohort_col = raw.columns[0]  # fall back to first column
+
+    # LONG layout: a "months since" column + a single value column.
+    months_since_col = None
+    for col in raw.columns:
+        cl = col.lower()
+        if ("since" in cl and ("month" in cl or "purchase" in cl)) or cl in ("months", "period", "month offset"):
+            months_since_col = col
+            break
+
+    rows: list[dict] = []
+    if months_since_col is not None:
+        value_col = None
+        for col in raw.columns:
+            cl = col.lower()
+            if any(k in cl for k in ("amount", "value", "spent", "revenue", "ltv")):
+                value_col = col
+                break
+        if value_col is None:
+            return None
+        for _, r in raw.iterrows():
+            try:
+                off = int(float(str(r[months_since_col]).strip().lower().lstrip("m").strip()))
+            except (ValueError, TypeError):
+                continue
+            val = pd.to_numeric(r[value_col], errors="coerce")
+            if pd.isna(val):
+                continue
+            rows.append({"cohort": str(r[cohort_col]).strip(), "month_offset": off, "value": float(val)})
+    else:
+        # WIDE layout: detect month-offset columns by header pattern.
+        offset_cols: list[tuple[str, int]] = []
+        for col in raw.columns:
+            m = _MONTH_OFFSET_RE.search(col)
+            if m and col != cohort_col:
+                offset_cols.append((col, int(m.group(1))))
+        if not offset_cols:
+            return None
+        for _, r in raw.iterrows():
+            cohort_label = str(r[cohort_col]).strip()
+            if not cohort_label or cohort_label.lower() == "nan":
+                continue
+            for col, off in offset_cols:
+                val = pd.to_numeric(r[col], errors="coerce")
+                if pd.isna(val):
+                    continue
+                rows.append({"cohort": cohort_label, "month_offset": off, "value": float(val)})
+
+    if not rows:
+        return None
+    return pd.DataFrame(rows).sort_values(["cohort", "month_offset"]).reset_index(drop=True)
+
+
 def _read_sessions(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path)
     df.columns = [c.strip().lstrip("﻿") for c in df.columns]
@@ -551,9 +640,6 @@ def ingest(inputs_dir: Path, run_date: date | None = None) -> IngestBundle:
             bundle.ad_spend[platform] = df
             meta.ad_platform_currency[platform] = ccy
     if "cohort" in roles:
-        try:
-            bundle.cohort = pd.read_csv(roles["cohort"])
-        except Exception:
-            bundle.cohort = None
+        bundle.cohort = _read_cohort(roles["cohort"])
 
     return bundle

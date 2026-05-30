@@ -237,13 +237,16 @@ def compute(bundle) -> RenderTree:
         tooltip=Tooltip(formula="(RC AOV − NC AOV) / NC AOV. Positive = RC spends more than NC.",
                         inputs=[("NC AOV", nc_aov), ("RC AOV", rc_aov)], sources=[src_nc_rc])))
 
-    # LTV growth rows (require a Shopify Cohort Analysis CSV — degrade gracefully if absent)
-    tree.rows.append(benchrow("Month 2 Customer Value Growth", None, bm['growth']['month_2_ltv_growth_min'], max_target=False,
-        tooltip=Tooltip(formula="From Shopify Cohort Analysis — Customer Value Month 2 / Month 0 − 1",
-                        confidence_note="Missing — Cohort Analysis CSV not provided.")))
-    tree.rows.append(benchrow("Month 5 Customer Value Growth", None, bm['growth']['month_5_ltv_growth_min'], max_target=False,
-        tooltip=Tooltip(formula="From Shopify Cohort Analysis — Customer Value Month 5 / Month 0 − 1",
-                        confidence_note="Missing — Cohort Analysis CSV not provided.")))
+    # LTV growth rows — populated from the cohort matrix (LTV tab stashes blended growth on derived).
+    ltv_growth = getattr(d, "ltv_growth", None)
+    m2_actual = ltv_growth.get(2) if ltv_growth else None
+    m5_actual = ltv_growth.get(5) if ltv_growth else None
+    _cohort_note = ("From Shopify Cohort Analysis — blended cumulative customer value vs Month 0."
+                    if ltv_growth else "Missing — Cohort Analysis CSV not provided; supply it to populate.")
+    tree.rows.append(benchrow("Month 2 Customer Value Growth", m2_actual, bm['growth']['month_2_ltv_growth_min'], max_target=False,
+        tooltip=Tooltip(formula="Cohort Month-2 cumulative value / Month-0 − 1", confidence_note=_cohort_note)))
+    tree.rows.append(benchrow("Month 5 Customer Value Growth", m5_actual, bm['growth']['month_5_ltv_growth_min'], max_target=False,
+        tooltip=Tooltip(formula="Cohort Month-5 cumulative value / Month-0 − 1", confidence_note=_cohort_note)))
 
     # ===== Block 4: Ops Benchmarks =====
     tree.rows.append(make_row(

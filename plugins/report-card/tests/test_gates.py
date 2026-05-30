@@ -135,6 +135,32 @@ def test_gate2_requires_at_least_one_ad_platform(synthetic_inputs, tmp_path):
     assert report.is_ready is False
 
 
+def test_ltv_mode_a_cohort_when_present(synthetic_inputs, tmp_path):
+    """With a cohort CSV, the LTV tab renders the true cohort matrix and the
+    Final Report Card M2/M5 growth rows populate."""
+    out = tmp_path / "out"
+    cli_main([str(synthetic_inputs), str(out), "--reporting-currency", "GBP", "--run-date", "2026-05-30"])
+    html = (out / "report-card-2026-05-30.html").read_text()
+    assert "Cumulative customer value by acquisition cohort" in html
+    assert "Blended % increase vs Month 0" in html
+    # FRC M2/M5 rows should no longer be the 'missing' placeholder.
+    assert "Cohort Analysis CSV not provided" not in html
+
+
+def test_ltv_mode_b_proxy_when_cohort_absent(tmp_path):
+    """Without a cohort CSV, the LTV tab falls back to the repeat-economics proxy."""
+    from tests.make_synthetic_pack import write_pack
+    pack = tmp_path / "no-cohort"
+    write_pack(pack, with_cohort=False)
+    out = tmp_path / "out"
+    cli_main([str(pack), str(out), "--reporting-currency", "GBP", "--run-date", "2026-05-30"])
+    html = (out / "report-card-2026-05-30.html").read_text()
+    assert "Repeat purchase rate" in html
+    assert "true cohort retention curve" in html  # the warning banner
+    # Cohort is optional — build still succeeds without it.
+    assert (out / "report-card-2026-05-30.xlsx").exists()
+
+
 def test_gate_nccm_is_quarter_over_quarter(synthetic_inputs, tmp_path):
     """NCCM renders one column per calendar quarter, not a single snapshot."""
     out = tmp_path / "out"

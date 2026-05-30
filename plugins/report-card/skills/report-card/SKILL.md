@@ -52,7 +52,7 @@ Once they've added files, re-run the pre-flight JSON command to confirm. Loop un
 
 Ad spend is an **at-least-one** group: the build needs Meta **or** Google **or** TikTok (more is better — all present platforms are summed). `preflight-json` exposes `ad_platform_present`; if false, ask for at least one platform's 12-month daily spend.
 
-Other optional inputs (`required: false`, `found: false`): mention briefly and note what degrades. The **P&L is optional** — Account Transactions is the primary expense source and the P&L is reconstructed from it; supply a clean P&L only if you want the bookkeeper's categorisation to take precedence. The **Cohort CSV** unlocks the LTV tab. Do not block on these.
+Other optional inputs (`required: false`, `found: false`): mention briefly and note what degrades. The **P&L is optional** — Account Transactions is the primary expense source and the P&L is reconstructed from it; supply a clean P&L only if you want the bookkeeper's categorisation to take precedence. The **Cohort CSV** upgrades the LTV tab from a repeat-economics proxy (Mode B) to the true cohort retention matrix (Mode A) and populates the Final Report Card M2/M5 growth benchmarks — worth requesting if the brand has ≥6 months of history. Do not block on these.
 
 ## The input pack (brand-neutral spec)
 
@@ -69,7 +69,7 @@ All exports cover the last 365 days. Client name is inferred from the Xero filen
 | `ad_spend_google` | `*google*spend*.{csv,xlsx}` | one-of | Google Ads → daily report |
 | `ad_spend_tiktok` | `*tiktok*spend*.{csv,xlsx}` | one-of | TikTok Ads Manager → daily report |
 | `xero_pl` | `*_Profit_and_Loss.xlsx` | optional | Xero → P&L (only if a clean categorised P&L should override the Atxn reconstruction) |
-| `cohort` | `*cohort*.csv` | optional | Shopify → Customer Cohort Analysis (unlocks LTV tab) |
+| `cohort` | `*cohort*.csv` | optional | Shopify → Customers → Cohort Analysis → 'Customer value by month' (last 6 months) — unlocks true cohort LTV (Mode A) + FRC M2/M5 benchmarks |
 
 The **NCCM tab runs quarter-over-quarter** — it needs the NC/RC export grouped by quarter. Without a quarter dimension it falls back to a single blended period and flags this in a banner.
 
@@ -106,4 +106,4 @@ python3 -m scripts.cli <inputs_dir> <output_dir> [--reporting-currency AUD|NZD|U
 - **Pre-flight blocks build** → ask user to provide missing required files; re-run preflight; do not skip.
 - **A3 FX FAIL** → runtime fetch failed (network down, currency unknown). Suggest running with `--reporting-currency` matching the source data to skip FX entirely.
 - **A4 SKIP** → Xero has no revenue accounts; reconciliation can't run. Informational.
-- **LTV tab red banner** → ask client for Shopify Cohort Analysis CSV.
+- **LTV tab in proxy mode (amber banner)** → working as designed without a cohort CSV; ask the client for the Shopify Cohort Analysis export to upgrade to the true cohort matrix + FRC M2/M5 benchmarks.
