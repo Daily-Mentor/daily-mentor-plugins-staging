@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Daily Mentor plugin marketplace for Claude Code.",
-    "version": "0.3.0"
+    "version": "0.3.1"
   },
   "plugins": [
     {
       "name": "report-card",
       "source": "./plugins/report-card",
-      "description": "Generate a 12-tab e-commerce diagnostic Report Card (HTML + xlsx) from a standardised input pack. Brand- and currency-neutral; quarter-over-quarter NCCM.",
-      "version": "0.3.0",
+      "description": "Generate a 12-tab e-commerce diagnostic Report Card (HTML + xlsx) from a standardised input pack. Brand- and currency-neutral; quarter-over-quarter NCCM and cohort LTV.",
+      "version": "0.3.1",
       "category": "analytics",
       "keywords": [
         "ecommerce",

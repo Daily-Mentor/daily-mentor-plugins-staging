@@ -1,8 +1,77 @@
 # Report Card
 
-Generate a 12-tab e-commerce diagnostic for any ecommerce founder from a standardised input pack (Shopify CSVs + Xero exports + ad-platform CSVs). Brand-neutral — works across businesses and reporting currencies.
+The **Report Card** skill (one tool in the Daily Mentor plugin marketplace) turns a standardised pack of Shopify, Xero and ad-platform exports into a 12-tab e-commerce diagnostic for a founder: a founder-facing HTML report (tooltips on every calculated cell) plus a mentor xlsx. Brand- and currency-neutral — it works across businesses and reporting currencies, with quarter-over-quarter unit economics (NCCM) and cohort-based LTV.
 
 Source-of-truth rules: Shopify is authoritative for monthly revenue (G39), Xero for expense accounts, Account Transactions netted Credit−Debit per (account, contact, month) for vendor breakdown (G35), no vendor sub-rows under revenue parents (G36).
+
+## Required inputs & how to obtain them
+
+All exports cover the **last 365 days**. Drop them into one folder and point the skill at it (`/report-card <folder>`). The client name is inferred from the Xero filenames. File detection is fuzzy — the save-as names below are recommended but variants are matched.
+
+### Shopify
+
+**1. Sessions by Month** → `Sessions by month - YYYY-MM-DD.csv`
+- Shopify Analytics → Reports → **Sessions**
+- Group by month → Export as CSV
+
+**2. Total Sales (daily)** → save as `Daily Mentor - Total Sales Over Time`
+- Shopify Analytics → Reports → **Total Sales** (over time)
+- Change time period: Last → **365 Days**
+- Remove comparison
+- Export as CSV
+- Save Report as `Daily Mentor - Total Sales Over Time`
+
+**3. New vs Returning, per quarter** → save as `Daily Mentor - NC v RC L365 CalQoQ`
+- Shopify Analytics → **custom report** → New exploration
+- Change time period: Last → **365 Days**
+- Paste into the Shopify Sidekick box: *"New exploration report for L365 days summarised per calendar quarter, New Customers vs Returning Customers, include filters gross sales, discounts, returns, shipping, tax, orders, Average order value and COGS"*
+- Save Report as `Daily Mentor - NC v RC L365 CalQoQ`
+- The **per-calendar-quarter** grouping is what drives the quarter-over-quarter NCCM. Without it, NCCM falls back to a single blended period (and says so).
+
+### Xero
+
+**4. Balance Sheet** → `{CLIENT}_-_Balance_Sheet.xlsx`
+- Xero → Reports → **Balance Sheet**
+- Change time period: default → **This Month**
+- Hit **Compare with** → set to *Enter a Different Number* → enter **12**
+- Hit Update
+- Export as **Excel** file
+- Save Report as `Daily Mentor - Balance Sheet`
+
+**5. Account Transactions** → `{CLIENT}_-_Account_Transactions.xlsx`
+- Xero → Reports → **Account Transactions**
+- Accounts → **Select All**
+- Change time period: default → **Custom Date Range, Last 365 Days**
+- Update columns to show **Date, Contact, Description, Debit (AUD), Credit (AUD)**
+- Hit Update
+- Export as **Excel** file
+- Save Report as `Daily Mentor - Account Transactions`
+- This is the **primary expense source** — the P&L is reconstructed from it (Credit−Debit netted per account/contact/month). A separate Xero P&L export is *optional* and only used if you want the bookkeeper's own categorisation to override the reconstruction.
+
+### Ad platforms — at least one required
+
+**6. Daily ad spend** (Meta / Google / TikTok) → e.g. `facebook_spend.csv`
+- Export daily spend by campaign for the last 12 months. The currency must appear in the column header (e.g. `Amount spent (AUD)`).
+- Provide at least one platform; all supplied platforms are summed. More is better.
+
+### Optional — unlocks the LTV tab
+
+**7. Cohort Analysis** → e.g. `Daily Mentor - Cohort Analysis customer value by month.csv`
+- Shopify Analytics → **Customers → Cohort Analysis** → *'Customer value by month'* (last 6 months) → Export as CSV
+- With it, the LTV tab renders the true cohort retention matrix and the Final Report Card Month-2 / Month-5 growth benchmarks populate. Without it, the LTV tab degrades to a repeat-economics proxy from the NC/RC split.
+
+| Role | Required | Saved-as name |
+|---|---|---|
+| Sessions by month | yes | `Sessions by month - YYYY-MM-DD.csv` |
+| Total Sales (daily) | yes | `Daily Mentor - Total Sales Over Time` |
+| NC vs RC (per quarter) | yes | `Daily Mentor - NC v RC L365 CalQoQ` |
+| Balance Sheet | yes | `{CLIENT}_-_Balance_Sheet.xlsx` |
+| Account Transactions | yes | `{CLIENT}_-_Account_Transactions.xlsx` |
+| Ad spend (Meta/Google/TikTok) | at least one | `*facebook*spend*` / `*google*spend*` / `*tiktok*spend*` |
+| Cohort Analysis | optional | `*cohort*.csv` |
+| Xero Profit & Loss | optional | `{CLIENT}_-_Profit_and_Loss.xlsx` |
+
+Run `python3 -m scripts.cli --preflight <folder>` (or just invoke the skill) to see exactly what's present, missing, or optional before building.
 
 ## Outputs
 
@@ -79,7 +148,7 @@ pip install openpyxl pandas pytest
 python3 -m pytest tests/test_gates.py -v
 ```
 
-Three acceptance gates: (1) evergreen across brand + currency, (2) pre-flight blocks on missing inputs, (3) produces both HTML + xlsx. Network-resilient — runs offline.
+Acceptance gates cover: evergreen across brand + currency, dependency + pre-flight gates block on missing tools/inputs, P&L-optional and ad-platform-one-of input rules, quarter-over-quarter NCCM, two-mode LTV (cohort matrix vs proxy), and dual HTML + xlsx output. Network-resilient — runs offline.
 
 ## Gotchas defended
 

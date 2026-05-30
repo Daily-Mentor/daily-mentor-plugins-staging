@@ -1,7 +1,7 @@
 {
   "name": "report-card",
-  "version": "0.3.0",
-  "description": "Generate a 12-tab e-commerce diagnostic Report Card (HTML + xlsx) from a standardised input pack (Shopify + Xero + ad platforms). Brand- and currency-neutral; quarter-over-quarter NCCM.",
+  "version": "0.3.1",
+  "description": "Generate a 12-tab e-commerce diagnostic Report Card (HTML + xlsx) from a standardised input pack (Shopify + Xero + ad platforms). Brand- and currency-neutral; quarter-over-quarter NCCM and cohort LTV.",
   "author": {
     "name": "Paul Crossland",
     "email": "hello@paulcrossland.com"
