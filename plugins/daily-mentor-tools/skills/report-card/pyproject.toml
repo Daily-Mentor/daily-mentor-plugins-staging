@@ -1,7 +1,7 @@
 [project]
-name = "report-card"
-version = "0.1.0"
-description = "Generate a 12-tab e-commerce Report Card from a standardised input pack."
+name = "report-card-skill"
+version = "0.4.0"
+description = "Report Card skill (part of the Daily Mentor Tools plugin) — 12-tab e-commerce diagnostic from a standardised input pack."
 requires-python = ">=3.11"
 dependencies = [
     "openpyxl>=3.1",

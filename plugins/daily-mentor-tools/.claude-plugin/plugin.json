@@ -1,0 +1,11 @@
+{
+  "name": "daily-mentor-tools",
+  "version": "0.4.0",
+  "description": "Daily Mentor toolkit for Claude Code — a suite of e-commerce mentorship skills. Includes the Report Card diagnostic (12-tab HTML + xlsx; brand- and currency-neutral; quarter-over-quarter NCCM and cohort LTV).",
+  "author": {
+    "name": "Paul Crossland",
+    "email": "hello@paulcrossland.com"
+  },
+  "license": "MIT",
+  "keywords": ["ecommerce", "shopify", "xero", "diagnostics", "mentorship", "analytics", "daily-mentor"]
+}

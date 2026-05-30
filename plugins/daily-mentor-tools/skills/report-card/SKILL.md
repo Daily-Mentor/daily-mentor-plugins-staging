@@ -12,10 +12,12 @@ The user has a folder of mentee data and wants the Report Card deliverable for a
 
 ## Step 0 — Dependency gate (run before everything)
 
+**Working directory:** all `python3 -m scripts.*` commands run from this skill's own directory (the folder containing this SKILL.md and its `scripts/` package) — `cd` into it first.
+
 The pipeline needs Python ≥ 3.11 plus `openpyxl` and `pandas`. Check this first, because a missing interpreter or package would otherwise fail cryptically.
 
 1. **Is Python present?** Run `python3 --version` via Bash. If the command isn't found, tell the user Python 3.11+ must be installed (e.g. `brew install python` on macOS, python.org installer on Windows) and stop — you cannot proceed without it.
-2. **Are the packages present?** Run `python3 -m scripts.check_deps --json` from the plugin directory. Parse the JSON:
+2. **Are the packages present?** Run `python3 -m scripts.check_deps --json` from this skill's directory. Parse the JSON:
    - `ready: true` → continue to pre-flight.
    - `ready: false` → look at `missing_pip_names` and `install_command`.
 3. **Offer to install.** If packages are missing, do not silently install. Ask the user: "openpyxl/pandas aren't installed — shall I install them with `<install_command>`?" If they agree, run the `install_command` via Bash (prefer `python3 -m pip install --user <pkgs>`, or `pip install --break-system-packages <pkgs>` on externally-managed envs). Re-run `check_deps --json` to confirm `ready: true`, then continue. If they decline, stop and explain the build can't run without them.

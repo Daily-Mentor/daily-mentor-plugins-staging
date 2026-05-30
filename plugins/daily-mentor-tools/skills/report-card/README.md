@@ -1,6 +1,6 @@
 # Report Card
 
-The **Report Card** skill (one tool in the Daily Mentor plugin marketplace) turns a standardised pack of Shopify, Xero and ad-platform exports into a 12-tab e-commerce diagnostic for a founder: a founder-facing HTML report (tooltips on every calculated cell) plus a mentor xlsx. Brand- and currency-neutral — it works across businesses and reporting currencies, with quarter-over-quarter unit economics (NCCM) and cohort-based LTV.
+The **Report Card** skill (part of the **Daily Mentor Tools** plugin) turns a standardised pack of Shopify, Xero and ad-platform exports into a 12-tab e-commerce diagnostic for a founder: a founder-facing HTML report (tooltips on every calculated cell) plus a mentor xlsx. Brand- and currency-neutral — it works across businesses and reporting currencies, with quarter-over-quarter unit economics (NCCM) and cohort-based LTV.
 
 Source-of-truth rules: Shopify is authoritative for monthly revenue (G39), Xero for expense accounts, Account Transactions netted Credit−Debit per (account, contact, month) for vendor breakdown (G35), no vendor sub-rows under revenue parents (G36).
 
@@ -81,7 +81,7 @@ Run `python3 -m scripts.cli --preflight <folder>` (or just invoke the skill) to 
 ## Quick start
 
 ```bash
-# from this plugin directory
+# from this skill directory (plugins/daily-mentor-tools/skills/report-card)
 python3 -m scripts.cli --preflight ./inputs          # 1. check what's present/missing
 python3 -m scripts.cli ./inputs ./out                # 2. build (defaults to AUD)
 python3 -m scripts.cli ./inputs ./out --reporting-currency GBP   # any reporting currency

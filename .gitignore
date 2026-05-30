@@ -29,7 +29,7 @@ report-card-*.xlsx
 audit/
 
 # Runtime FX cache (fetched on demand)
-plugins/report-card/.fx-cache/
+**/.fx-cache/
 
 # Dev references / brand assets (not part of the distributable skill)
 AI_SPECIALIST_HANDOVER.md
@@ -40,5 +40,5 @@ Report_Card_*.xlsx
 report-card-{date}.xlsx
 
 # Test fixtures may contain client data — keep synthetic only; ignore real drops
-plugins/report-card/tests/fixtures/**/*.xlsx
-plugins/report-card/tests/fixtures/**/*real*
+**/tests/fixtures/**/*.xlsx
+**/tests/fixtures/**/*real*

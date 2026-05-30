@@ -15,6 +15,8 @@ Build a Report Card for an e-commerce brand from a standardised input pack.
 /report-card                       # defaults to ./inputs and cwd
 ```
 
+The implementation lives in the `report-card` skill (`skills/report-card/`). Invoke that skill — it carries the full behaviour spec. All `python3 -m scripts.*` commands run from the skill's directory.
+
 ## How the skill should behave
 
 1. **Pre-flight first.** Before building, run `python3 -m scripts.cli --preflight <inputs_dir>` to scan what's present. Read the JSON report.
