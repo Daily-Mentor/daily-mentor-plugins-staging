@@ -161,8 +161,8 @@ def compute(bundle) -> RenderTree:
     tree.rows.append(metric_row("tax", "Tax per order", lambda v: v["tax_po"], "money",
         "Tax collected / NC orders.", indent=2))
 
-    # ---- OPERATIONAL COST PER ORDER ----
-    tree.rows.append(section("s2", "OPERATIONAL COST PER ORDER"))
+    # ---- BLENDED COGS PER ORDER ----
+    tree.rows.append(section("s2", "BLENDED COGS PER ORDER"))
     tree.rows.append(metric_row("cogs", "Product COGS (Shopify per-sale)", lambda v: v["cogs_po"], "money",
         "NC COGS / NC orders. Landed costs (Freight, Warehouse) sit in the lines below."))
     tree.rows.append(metric_row("pp", "Payment Processing", lambda v: v["pp"], "money",
@@ -175,13 +175,13 @@ def compute(bundle) -> RenderTree:
         f"Default ${packaging:.2f}/order. Box, tape, inserts."))
     tree.rows.append(metric_row("ful", "Fulfilment (3PL)", lambda v: v["ful"], "money",
         f"Default ${fulfillment:.2f}/order. Replace with Xero 'Warehouse' / 3PL invoice / orders."))
-    tree.rows.append(metric_row("opcost", "Total Operational Cost", lambda v: v["op_cost"], "money",
-        "Sum of the operational lines above.", bold=True, is_total=True))
+    tree.rows.append(metric_row("opcost", "Total COGS per order", lambda v: v["op_cost"], "money",
+        "", bold=True, is_total=True))
 
     # ---- MARGIN ----
     tree.rows.append(section("s3", "MARGIN"))
     tree.rows.append(metric_row("gp", "Gross Profit per Order", lambda v: v["gp_po"], "money",
-        "AOV − Total Operational Cost.", bold=True, tip_formula="AOV − Total Operational Cost"))
+        "AOV − Total COGS per order.", bold=True, tip_formula="AOV − Total COGS per order"))
     tree.rows.append(metric_row("adq", "Ad Spend (quarter)", lambda v: v["ad_q"], "money",
         "Total ad-platform spend in the calendar quarter (×FX).", indent=2))
     tree.rows.append(metric_row("cac", "CAC", lambda v: v["cac"], "money",

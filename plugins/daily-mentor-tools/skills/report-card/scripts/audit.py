@@ -15,20 +15,27 @@ def run_ingest_audit(bundle, render_trees) -> AuditReport:
     report = AuditReport(run_id=datetime.now().strftime("%Y%m%dT%H%M%S"),
                          timestamp=datetime.now())
 
-    # A1: inputs present
-    expected = {"shopify_daily", "nc_rc", "sessions", "xero_pl", "xero_bs", "xero_atxn", "ad_spend_meta"}
+    # A1: inputs present. The Xero P&L is optional — Account Transactions is the
+    # primary expense/COGS source and the P&L is reconstructed from it, so a missing
+    # P&L must not fail the audit.
+    expected = {"shopify_daily", "nc_rc", "sessions", "xero_bs", "xero_atxn", "ad_spend_meta"}
     found = set(bundle.meta.files_found.keys())
     missing = list(expected - found)
     optional_cohort = "cohort" not in found
+    optional_pl = "xero_pl" not in found
     if missing:
         report.results.append(AuditResult("A1", "Inputs present", "FAIL",
             message=f"Missing required inputs: {', '.join(missing)}",
-            details={"missing": missing, "optional_cohort_missing": optional_cohort}))
-    elif optional_cohort:
-        report.results.append(AuditResult("A1", "Inputs present", "PASS",
-            message="All required inputs found. Optional Shopify Cohort CSV not provided — LTV tab degrades."))
+            details={"missing": missing, "optional_cohort_missing": optional_cohort, "optional_pl_missing": optional_pl}))
     else:
-        report.results.append(AuditResult("A1", "Inputs present", "PASS", message="All 7 required + cohort optional present."))
+        notes = []
+        if optional_pl:
+            notes.append("Optional Xero P&L not provided — reconstructed from Account Transactions.")
+        if optional_cohort:
+            notes.append("Optional Shopify Cohort CSV not provided — LTV tab degrades.")
+        report.results.append(AuditResult("A1", "Inputs present", "PASS",
+            message=" ".join(["All 6 required inputs found."] + notes) if notes else "All 6 required + optional inputs present.",
+            details={"optional_cohort_missing": optional_cohort, "optional_pl_missing": optional_pl}))
 
     # A2: currency detection
     explicit = [p for p, c in bundle.meta.ad_platform_currency.items() if c.confidence == "explicit"]

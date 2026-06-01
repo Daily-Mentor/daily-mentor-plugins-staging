@@ -56,14 +56,24 @@ def compute(bundle) -> RenderTree:
         kv("Posted months", "None — Xero P&L shows no posted activity.")
 
     tree.rows.append(make_row([section_cell("nr.s_cogs", "COGS Source"), text_cell("nr.s_cogs.v", "")], is_section=True))
-    if bundle.shopify_daily is not None and not bundle.shopify_daily.empty and "cogs_aud" in bundle.shopify_daily.columns:
-        shop_cogs_total = float(bundle.shopify_daily["cogs_aud"].sum())
-        kv("Shopify product COGS (12-mo)", f"{shop_cogs_total:,.0f} {meta.reporting_currency} — used as the COGS source.")
-    if bundle.xero_pl is not None and not bundle.xero_pl.empty:
-        xero_cogs = bundle.xero_pl[bundle.xero_pl["bucket"] == "cogs"]["value"].sum()
-        xero_cogs = float(abs(xero_cogs))
-        kv("Xero COGS (12-mo, informational)", f"{xero_cogs:,.0f} {meta.reporting_currency} — not used in Monthly P&L; depends on stock-write-off bookkeeping.")
-    kv("Why Shopify over Xero for COGS", "Shopify posts product cost at sale time; Xero requires the bookkeeper to reclassify Inventory→COGS via journals. Freight, Warehouse and Fulfilment are still sourced from Xero under Operating Expenses.")
+    me = d.monthly_expenses if d.monthly_expenses is not None else None
+    total_cogs = 0.0
+    xero_product_cogs = 0.0
+    if me is not None and not me.empty and "bucket_section" in me.columns:
+        total_cogs = float(me[me["bucket_section"] == "Cost of Sales"]["value"].abs().sum())
+        if "bucket" in me.columns:
+            xero_product_cogs = float(me[me["bucket"] == "cogs_product_xero"]["value"].abs().sum())
+    if total_cogs > 0:
+        kv("Total COGS (12-mo, Xero Cost of Sales)",
+           f"{total_cogs:,.0f} {meta.reporting_currency} — the COGS source for the Monthly P&L and Final Report Card.")
+        if xero_product_cogs > 0:
+            kv("  · of which Product COGS (Xero CoGS Recognition)",
+               f"{xero_product_cogs:,.0f} {meta.reporting_currency} — accrual product cost from the bookkeeper's recognition journals; the rest is Freight, Packaging, Merchant & other Cost-of-Sales lines.")
+        else:
+            kv("Product COGS basis",
+               "Xero has no CoGS Recognition journals posted — product cost falls back to Shopify per-sale (×FX); Freight, Packaging and other Cost-of-Sales lines still come from Xero.")
+    else:
+        kv("COGS", "No Cost-of-Sales lines found in Xero — confirm COGS / recognition journals are posted.")
 
     tree.rows.append(make_row([section_cell("nr.s5", "Recommended Actions"), text_cell("nr.s5.v", "")], is_section=True))
     recs = []

@@ -34,16 +34,24 @@ def compute(bundle) -> RenderTree:  # IngestBundle (with .derived)
 
     tree = RenderTree(tab_id="homepage", title="Homepage", subtitle="Company Performance Report Card")
 
-    # --- Decide snapshot label ---
-    snapshot_days = None
-    if d.snapshot_window:
-        snapshot_days = (d.snapshot_window[1] - d.snapshot_window[0]).days + 1
-    label = "90 Day Company Snapshot" if snapshot_days and snapshot_days >= 85 else f"{snapshot_days or '?'} Day Company Snapshot"
-    tree.subtitle = label
+    # --- Period label ---
+    tree.subtitle = "12-Month Company Snapshot"
 
     # ---- NC / RC block ----
-    new_row = nc_rc[nc_rc["segment"].str.lower() == "new"].iloc[0] if (nc_rc is not None and not nc_rc.empty) else None
-    ret_row = nc_rc[nc_rc["segment"].str.lower() == "returning"].iloc[0] if (nc_rc is not None and not nc_rc.empty) else None
+    # Aggregate ALL quarters in the NC/RC file (full 12 months). The file is grouped
+    # by quarter, so taking a single row (.iloc[0]) would silently report just one
+    # quarter; we sum every quarter for each segment instead.
+    def _agg_segment(seg: str):
+        if nc_rc is None or nc_rc.empty:
+            return None
+        rows = nc_rc[nc_rc["segment"].str.lower() == seg]
+        if rows.empty:
+            return None
+        cols = ("gross", "discounts", "returns", "shipping", "taxes", "orders", "cogs")
+        return {c: float(rows[c].sum()) if c in rows.columns else 0.0 for c in cols}
+
+    new_row = _agg_segment("new")
+    ret_row = _agg_segment("returning")
 
     tree.columns = ["Metric", "New Customer", "Returning Customer"]
     tree.rows.append(make_row([section_cell("hp.s1", "Customer Performance"), text_cell("hp.s1.b", ""), text_cell("hp.s1.c", "")], is_section=True))
@@ -52,7 +60,7 @@ def compute(bundle) -> RenderTree:  # IngestBundle (with .derived)
         return money_cell(coord, value, tooltip=Tooltip(
             formula=label, inputs=[("Source", sources)], result_expr=f"{value:,.2f}" if value is not None else "—",
             sources=sources if isinstance(sources, list) else [sources],
-            confidence_note="Provisional — NC/RC report covers a single period.",
+            confidence_note="Provisional — NC/RC aggregated across the 12-month window.",
         ))
 
     nc_rc_source = Path(meta.files_found.get("nc_rc", "")).name
@@ -69,10 +77,10 @@ def compute(bundle) -> RenderTree:  # IngestBundle (with .derived)
             text_cell(f"hp.{key}.a", label, indent=1),
             money_cell(f"hp.{key}.nc", nv, tooltip=Tooltip(
                 formula=f"NC {label}", result_expr=f"{nv:,.2f}" if nv is not None else "—",
-                sources=[nc_rc_source], confidence_note="Provisional — single period.")),
+                sources=[nc_rc_source], confidence_note="Provisional — 12-month aggregate.")),
             money_cell(f"hp.{key}.rc", rv, tooltip=Tooltip(
                 formula=f"RC {label}", result_expr=f"{rv:,.2f}" if rv is not None else "—",
-                sources=[nc_rc_source], confidence_note="Provisional — single period.")),
+                sources=[nc_rc_source], confidence_note="Provisional — 12-month aggregate.")),
         ]))
 
     # Performance Sales (Gross + Discounts + Shipping + Tax) — inclusive of tax per spec
@@ -136,8 +144,8 @@ def compute(bundle) -> RenderTree:  # IngestBundle (with .derived)
     # ---- Site Metrics block ----
     tree.rows.append(make_row([section_cell("hp.s2", "Site Metrics"), text_cell("hp.s2.b", ""), text_cell("hp.s2.c", "")], is_section=True))
     if sessions is not None and not sessions.empty:
-        total_sessions_90 = float(sessions.tail(3)["sessions"].sum())
-        total_visitors_90 = float(sessions.tail(3)["visitors"].sum())
+        total_sessions_90 = float(sessions.tail(12)["sessions"].sum())
+        total_visitors_90 = float(sessions.tail(12)["visitors"].sum())
         sessions_src = Path(meta.files_found.get("sessions", "")).name
     else:
         total_sessions_90 = total_visitors_90 = None
@@ -145,9 +153,9 @@ def compute(bundle) -> RenderTree:  # IngestBundle (with .derived)
 
     cr = safe_div((nc_orders or 0) + (rc_orders or 0), total_sessions_90) if total_sessions_90 else None
     tree.rows.append(make_row([
-        text_cell("hp.sessions.a", "Sessions (last 3 months)", indent=1),
+        text_cell("hp.sessions.a", "Sessions (12 months)", indent=1),
         int_cell("hp.sessions.v", total_sessions_90, tooltip=Tooltip(
-            formula="Sum of Sessions for the most recent 3 months",
+            formula="Sum of Sessions over the 12-month window",
             sources=[sessions_src], confidence_note="Provisional.",
         )),
         text_cell("hp.sessions.c", ""),
@@ -155,7 +163,7 @@ def compute(bundle) -> RenderTree:  # IngestBundle (with .derived)
     tree.rows.append(make_row([
         text_cell("hp.cr.a", "Conversion Rate (Orders / Sessions)", indent=1),
         pct_cell("hp.cr.v", cr, tooltip=Tooltip(
-            formula="(NC Orders + RC Orders) / Sessions (last 3 months)",
+            formula="(NC Orders + RC Orders) / Sessions, both over the 12-month window",
             inputs=[("NC Orders", nc_orders), ("RC Orders", rc_orders), ("Sessions", total_sessions_90)],
             result_expr=f"({nc_orders} + {rc_orders}) / {total_sessions_90:,.0f} = {cr*100:.2f}%" if cr else "—",
             sources=[nc_rc_source, sessions_src],
@@ -165,7 +173,9 @@ def compute(bundle) -> RenderTree:  # IngestBundle (with .derived)
 
     # ---- Ad spend block (per-platform breakdown) ----
     tree.rows.append(make_row([section_cell("hp.s3", "Marketing Spend"), text_cell("hp.s3.b", ""), text_cell("hp.s3.c", "")], is_section=True))
-    snapshot_start, snapshot_end = d.snapshot_window if d.snapshot_window else (None, None)
+    # Full 12-month window so ad spend lines up with the 12-month revenue above.
+    snapshot_start = meta.lookback_start or (d.snapshot_window[0] if d.snapshot_window else None)
+    snapshot_end = meta.lookback_end or (d.snapshot_window[1] if d.snapshot_window else None)
     ad_spend_90 = None
     fx_note = None
     ad_src_list = []
@@ -190,7 +200,7 @@ def compute(bundle) -> RenderTree:  # IngestBundle (with .derived)
             tree.rows.append(make_row([
                 text_cell(f"hp.adspend.{platform}.a", platform_labels[platform], indent=1),
                 money_cell(f"hp.adspend.{platform}.v", platform_spend[platform], tooltip=Tooltip(
-                    formula=f"Sum of {platform_labels[platform]} over snapshot window ×FX.",
+                    formula=f"Sum of {platform_labels[platform]} over the 12-month window ×FX.",
                     sources=[Path(meta.files_found.get(f"ad_spend_{platform}", "")).name],
                     fx_note=fx_note if meta.ad_platform_currency.get(platform) and meta.ad_platform_currency[platform].code != meta.reporting_currency else None,
                     gotcha_refs=["G39"],
@@ -213,9 +223,9 @@ def compute(bundle) -> RenderTree:  # IngestBundle (with .derived)
     mer = safe_div(ad_spend_90, total_gross_period)
 
     tree.rows.append(make_row([
-        text_cell("hp.adspend.a", "Total Ad Spend (last 90d window)", indent=1, bold=True),
+        text_cell("hp.adspend.a", "Total Ad Spend (12 months)", indent=1, bold=True),
         money_cell("hp.adspend.v", ad_spend_90, tooltip=Tooltip(
-            formula="Sum of platform-level daily ad spend over the snapshot window, in reporting currency.",
+            formula="Sum of platform-level daily ad spend over the 12-month window, in reporting currency.",
             inputs=[("Window", f"{snapshot_start} → {snapshot_end}")],
             sources=ad_src_list, fx_note=fx_note,
             confidence_note="Provisional — sourced from ad platform exports (G39: not from Xero).",
@@ -235,9 +245,9 @@ def compute(bundle) -> RenderTree:  # IngestBundle (with .derived)
     ]))
 
     # ---- OPEX Summary (snapshot period) ----
-    tree.rows.append(make_row([section_cell("hp.s_opex", "OPEX Summary (snapshot period)"),
+    tree.rows.append(make_row([section_cell("hp.s_opex", "OPEX Summary (12 months)"),
                                 text_cell("hp.s_opex.b", ""), text_cell("hp.s_opex.c", "")], is_section=True))
-    # Aggregate posted Xero OPEX over the snapshot window. If posted months are sparse, use posted-month average × ratio of window.
+    # Aggregate posted Xero OPEX over the 12-month window. If posted months are sparse, use posted-month average × ratio of window.
     opex_period = {"Marketing": 0.0, "Wages + Super": 0.0, "Subscriptions (Software)": 0.0,
                    "Other OPEX (freight/admin/travel/etc.)": 0.0}
     if not d.monthly_expenses.empty:
@@ -266,7 +276,7 @@ def compute(bundle) -> RenderTree:  # IngestBundle (with .derived)
             text_cell(f"hp.opex.{label}.c", ""),
         ]))
     tree.rows.append(make_row([
-        text_cell("hp.opex.tot.a", "Total OPEX (snapshot period)", indent=1, bold=True),
+        text_cell("hp.opex.tot.a", "Total OPEX (12 months)", indent=1, bold=True),
         money_cell("hp.opex.tot.v", total_opex_period if total_opex_period else None, tooltip=Tooltip(
             formula="Sum of the four OPEX buckets above.",
             sources=[Path(meta.files_found.get("xero_pl", "")).name, *ad_src_list],
@@ -335,9 +345,8 @@ def compute(bundle) -> RenderTree:  # IngestBundle (with .derived)
     ))
 
     # ---- Banners ----
-    if snapshot_days and snapshot_days < 85:
-        tree.banners.append(Banner(severity="warning",
-            text=f"Snapshot relabeled to '{snapshot_days}-Day' — NC/RC export covers less than 90 days. KPIs are sample-thin."))
+    tree.banners.append(Banner(severity="info",
+        text="All figures are full 12-month: NC/RC aggregated across every quarter, ad spend and sessions summed over the lookback. (Per-quarter detail lives on the NCCM tab.)"))
     if meta.files_missing:
         tree.banners.append(Banner(severity="error",
             text="Missing input files: " + ", ".join(meta.files_missing)))

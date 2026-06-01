@@ -39,12 +39,13 @@ def _scan(inputs_dir: Path) -> dict[str, Path]:
     candidate_atxn: list[Path] = []
     candidate_pl: list[Path] = []
     candidate_bs: list[Path] = []
+    candidate_shopify_daily: list[Path] = []
     for name, path in files.items():
         lower = name.lower()
         # Daily sales: 'Daily Mentor - Total Sales Over Time' (new) or legacy 'shopify_daily' / 'total_sales'.
         if (("total sales over time" in lower or "shopify_daily" in lower or "total_sales" in lower)
                 and lower.endswith(".csv")):
-            roles["shopify_daily"] = path
+            candidate_shopify_daily.append(path)
         # NC vs RC: 'Daily Mentor - NC v RC L365' (new) or legacy 'gross sales by new or returning'.
         elif ("nc v rc" in lower or "nc vs rc" in lower or "new or returning" in lower
               or "new vs returning" in lower):
@@ -65,6 +66,11 @@ def _scan(inputs_dir: Path) -> dict[str, Path]:
             roles["ad_spend_tiktok"] = path
         elif "cohort" in lower:
             roles["cohort"] = path
+    if candidate_shopify_daily:
+        # Multiple 'total sales over time' exports (e.g. a daily file plus a stray
+        # monthly one) — prefer the largest, which is the daily-granularity file the
+        # P&L needs. Mirrors the pre-flight's largest-wins rule so they never disagree.
+        roles["shopify_daily"] = max(candidate_shopify_daily, key=lambda p: p.stat().st_size)
     if candidate_atxn:
         roles["xero_atxn"] = max(candidate_atxn, key=lambda p: p.stat().st_size)
     if candidate_pl:
@@ -449,8 +455,11 @@ def _read_xero_bs(path: Path) -> pd.DataFrame:
         d = _parse_month_header(h) if h else None
         if d:
             date_cols.append((c, d))
+    _SUBSECTIONS = {"bank", "current assets", "fixed assets", "non-current assets",
+                    "current liabilities", "non-current liabilities"}
     rows = []
     section = None
+    subsection = None
     for r in range(header_row + 1, ws.max_row + 1):
         # Section header lives in col 1 when label_col == 2
         col1 = ws.cell(r, 1).value
@@ -459,15 +468,22 @@ def _read_xero_bs(path: Path) -> pd.DataFrame:
             section_text = col1.strip()
             if section_text.lower() in {"assets", "liabilities", "equity"}:
                 section = section_text
+                subsection = None  # reset on a new top-level section
             continue
         if not isinstance(label, str) or not label.strip():
             continue
         label_clean = label.strip()
         label_lower = label_clean.lower()
-        # Skip totals + sub-section labels
+        # Sub-section labels (e.g. 'Bank') carry the actual balances in their child
+        # rows — Xero often exports the 'Total <sub-section>' line as 0, so we track
+        # the sub-section and let downstream code sum the children instead.
+        if label_lower in _SUBSECTIONS:
+            subsection = label_clean
+            continue
+        # Skip totals + the 'Net Assets' summary line
         if label_lower.startswith("total "):
             continue
-        if label_lower in {"net assets", "bank", "current assets", "fixed assets", "non-current assets", "current liabilities", "non-current liabilities"}:
+        if label_lower == "net assets":
             continue
         for c, d in date_cols:
             v = ws.cell(r, c).value
@@ -478,6 +494,7 @@ def _read_xero_bs(path: Path) -> pd.DataFrame:
             rows.append({
                 "account": label_clean,
                 "section": section or "Assets",
+                "subsection": subsection,
                 "as_at": d,
                 "value": val,
             })
@@ -602,7 +619,9 @@ def ingest(inputs_dir: Path, run_date: date | None = None) -> IngestBundle:
     roles = _scan(inputs_dir)
 
     files_found = {k: str(v) for k, v in roles.items()}
-    expected = ["shopify_daily", "nc_rc", "sessions", "xero_pl", "xero_bs", "xero_atxn", "ad_spend_meta"]
+    # xero_pl is optional — Account Transactions is the primary source and the P&L is
+    # reconstructed from it, so its absence must not be reported as a missing input.
+    expected = ["shopify_daily", "nc_rc", "sessions", "xero_bs", "xero_atxn", "ad_spend_meta"]
     missing = [r for r in expected if r not in roles]
 
     meta = IngestMeta(

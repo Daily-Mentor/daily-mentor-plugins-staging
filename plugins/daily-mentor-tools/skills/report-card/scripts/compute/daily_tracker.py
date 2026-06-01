@@ -26,13 +26,26 @@ def compute(bundle) -> RenderTree:
     after_fees_factor = defaults["daily_tracker"]["after_fees_factor"]
 
     tree = RenderTree(tab_id="daily_tracker", title="Daily Tracker",
-                      subtitle="Day-by-day Orders, Sales, Ad Spend, COGS, Profit. Switch month using the pills.")
-    tree.columns = ["Date", "Orders", "Units", "Gross Sales", "After Fees", "Ad Spend",
-                    "COGS", "Refunds", "Op Cost", "AOV", "CPA", "ROAS", "Profit", "Profit %"]
+                      subtitle="Day-by-day Orders, Sales, Ad Spend, Profit. Switch month using the pills.")
 
     if bundle.shopify_daily is None or bundle.shopify_daily.empty:
         tree.banners.append(Banner(severity="error", text="Shopify daily file missing — Daily Tracker cannot render."))
         return tree
+
+    # The Shopify 'Total Sales Over Time' export usually carries no per-day COGS column.
+    # When it's absent we can't deduct product cost daily, so the COGS column shows '—'
+    # and the bottom line is a Pre-COGS Contribution (After Fees − Ad − Refunds − Op Cost).
+    has_daily_cogs = ("cogs_aud" in bundle.shopify_daily.columns
+                      and float(bundle.shopify_daily["cogs_aud"].abs().sum()) > 0)
+    profit_label = "Profit" if has_daily_cogs else "Pre-COGS Contribution"
+    tree.columns = ["Date", "Orders", "Units", "Gross Sales", "After Fees", "Ad Spend",
+                    ("COGS" if has_daily_cogs else "COGS (n/a)"), "Refunds", "Op Cost",
+                    "AOV", "CPA", "ROAS", profit_label, profit_label + " %"]
+    if not has_daily_cogs:
+        tree.banners.append(Banner(severity="warning",
+            text=("Daily product COGS isn't in the Shopify 'Total Sales Over Time' export, so the COGS column "
+                  "shows '—' and the bottom line is a Pre-COGS Contribution (After Fees − Ad − Refunds − Op Cost). "
+                  "Full-period COGS is on the Monthly P&L (from Xero).")))
 
     # Op cost per day: avg posted OPEX × (days posted total) — but simpler: avg per-month / days-in-month.
     daily_op_cost = None
@@ -80,7 +93,8 @@ def compute(bundle) -> RenderTree:
             money_cell(f"dt.{month_key}.tot.gross", tot_gross, tooltip=Tooltip(formula="Sum of daily gross ×FX", sources=[shopify_src], gotcha_refs=["G39"])),
             money_cell(f"dt.{month_key}.tot.after", tot_after, tooltip=Tooltip(formula=f"Gross × {after_fees_factor}", confidence_note="After-fees factor is a mentor default; tune per client.")),
             money_cell(f"dt.{month_key}.tot.ad", tot_ad, tooltip=Tooltip(formula="Sum of platform daily ad spend ×FX", sources=[ad_src], gotcha_refs=["G39"])),
-            money_cell(f"dt.{month_key}.tot.cogs", tot_cogs, tooltip=Tooltip(formula="Sum of Shopify daily COGS ×FX", sources=[shopify_src], confidence_note="Shopify product-COGS only.")),
+            (money_cell(f"dt.{month_key}.tot.cogs", tot_cogs, tooltip=Tooltip(formula="Sum of Shopify daily COGS ×FX", sources=[shopify_src], confidence_note="Shopify product-COGS only."))
+             if has_daily_cogs else text_cell(f"dt.{month_key}.tot.cogs", "—")),
             money_cell(f"dt.{month_key}.tot.refunds", abs(tot_refunds), tooltip=Tooltip(formula="abs sum of Returns ×FX", sources=[shopify_src])),
             money_cell(f"dt.{month_key}.tot.op", tot_op, tooltip=Tooltip(formula="Avg daily OPEX × days in month", inputs=[("Avg daily", daily_op_cost), ("Days", len(group))], confidence_note="Derived from posted-OPEX average.")),
             money_cell(f"dt.{month_key}.tot.aov", tot_aov, decimals=2, tooltip=Tooltip(formula="Gross / Orders")),
@@ -117,8 +131,9 @@ def compute(bundle) -> RenderTree:
                     formula=f"Gross × {after_fees_factor}")),
                 money_cell(f"dt.{day}.ad", ad, decimals=2, tooltip=Tooltip(
                     formula="Sum of platform spend for this day ×FX", sources=[ad_src], gotcha_refs=["G39"])),
-                money_cell(f"dt.{day}.cogs", cogs, decimals=2, tooltip=Tooltip(
-                    formula="Shopify product COGS for this day ×FX", sources=[shopify_src])),
+                (money_cell(f"dt.{day}.cogs", cogs, decimals=2, tooltip=Tooltip(
+                    formula="Shopify product COGS for this day ×FX", sources=[shopify_src]))
+                 if has_daily_cogs else text_cell(f"dt.{day}.cogs", "—")),
                 money_cell(f"dt.{day}.refunds", abs(refunds), decimals=2, tooltip=Tooltip(
                     formula="abs(Returns) for this day ×FX", sources=[shopify_src])),
                 money_cell(f"dt.{day}.op", op, decimals=2, tooltip=Tooltip(

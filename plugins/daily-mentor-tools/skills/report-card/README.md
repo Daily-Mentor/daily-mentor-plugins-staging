@@ -11,7 +11,7 @@ All exports cover the **last 365 days**. Drop them into one folder and point the
 ### Shopify
 
 **1. Sessions by Month** → `Sessions by month - YYYY-MM-DD.csv`
-- Shopify Analytics → Reports → **Sessions**
+- Shopify Analytics → Reports → **Sessions Over Time**
 - Group by month → Export as CSV
 
 **2. Total Sales (daily)** → save as `Daily Mentor - Total Sales Over Time`
@@ -57,7 +57,7 @@ All exports cover the **last 365 days**. Drop them into one folder and point the
 ### Optional — unlocks the LTV tab
 
 **7. Cohort Analysis** → e.g. `Daily Mentor - Cohort Analysis customer value by month.csv`
-- Shopify Analytics → **Customers → Cohort Analysis** → *'Customer value by month'* (last 6 months) → Export as CSV
+- Shopify Analytics → **Customers → Cohort Analysis** → *'Customer value by month'* (last 12 months) → Export as CSV
 - With it, the LTV tab renders the true cohort retention matrix and the Final Report Card Month-2 / Month-5 growth benchmarks populate. Without it, the LTV tab degrades to a repeat-economics proxy from the NC/RC split.
 
 | Role | Required | Saved-as name |

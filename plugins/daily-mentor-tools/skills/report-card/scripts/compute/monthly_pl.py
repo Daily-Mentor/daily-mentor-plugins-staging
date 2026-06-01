@@ -678,6 +678,9 @@ def compute(bundle) -> RenderTree:
     if getattr(d, "pl_source", "xero_pl_file") == "atxn_derived":
         tree.banners.append(Banner(severity="info",
             text="The supplied Xero P&L file was thinner than the Account Transactions export — P&L lines have been reconstructed from Account Transactions (Credit − Debit per account-month). Vendor breakdown comes from the same source."))
+    elif meta.files_found.get("xero_pl"):
+        tree.banners.append(Banner(severity="warning",
+            text="Using the supplied Xero P&L file — it overrides the Account-Transactions reconstruction and takes precedence for these expense lines. Verify the bookkeeper's categorisation, since any mis-mapped account flows straight into these figures."))
     if inject_marketing_from_ads:
         tree.banners.append(Banner(severity="info",
             text="No Marketing/Advertising account found in Xero — the Marketing section is sourced from the ad-platform CSVs instead (Meta + Google + TikTok where present)."))

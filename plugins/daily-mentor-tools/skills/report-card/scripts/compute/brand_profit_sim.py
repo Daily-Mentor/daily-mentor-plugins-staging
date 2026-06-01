@@ -11,33 +11,40 @@ def compute(bundle) -> RenderTree:
     nc_rc = bundle.nc_rc
 
     tree = RenderTree(tab_id="brand_profit_sim", title="Brand Profit Simulator",
-                      subtitle="What-if projection across aMER scenarios — based on the snapshot period.")
+                      subtitle="What-if projection across aMER scenarios — full 12-month new-customer acquisition economics.")
 
     if nc_rc is None or nc_rc.empty:
         tree.banners.append(Banner(severity="error", text="NC/RC missing — simulator cannot run."))
         return tree
 
-    nc = nc_rc[nc_rc["segment"].str.lower() == "new"].iloc[0]
-    rc = nc_rc[nc_rc["segment"].str.lower() == "returning"].iloc[0]
-    nc_orders = int(nc["orders"])
-    nc_perf = float(nc["gross"]) + float(nc["discounts"]) + float(nc["shipping"]) + float(nc["taxes"])
+    # Aggregate New-customer rows across ALL quarters (full 12 months) — never a single
+    # quarter. aMER is an acquisition metric, so it is driven by new-customer revenue.
+    nc_rows = nc_rc[nc_rc["segment"].str.lower() == "new"]
+    if nc_rows.empty:
+        tree.banners.append(Banner(severity="error", text="NC/RC has no New-customer rows — simulator cannot run."))
+        return tree
+
+    def _s(col):
+        return float(nc_rows[col].sum()) if col in nc_rows.columns else 0.0
+
+    nc_orders = int(_s("orders"))
+    nc_perf = _s("gross") + _s("discounts") + _s("shipping") + _s("taxes")
     nc_aov = safe_div(nc_perf, nc_orders)
-    nc_cogs = float(nc["cogs"])
+    nc_cogs = _s("cogs")
     nc_cogs_per_order = safe_div(nc_cogs, nc_orders)
 
-    ad_spend = 0.0
-    if not d.daily_ad_spend.empty and d.snapshot_window:
-        mask = (d.daily_ad_spend["day"] >= d.snapshot_window[0]) & (d.daily_ad_spend["day"] <= d.snapshot_window[1])
-        ad_spend = float(d.daily_ad_spend.loc[mask, "amount"].sum())
+    # Full 12-month ad spend (platform CSVs).
+    ad_spend = float(d.daily_ad_spend["amount"].sum()) if not d.daily_ad_spend.empty else 0.0
     actual_amer = safe_div(nc_perf, ad_spend)
 
-    # OPEX/period
-    avg_opex = None
-    if not d.monthly_expenses.empty and d.posted_months:
-        non_cogs = d.monthly_expenses[~d.monthly_expenses["account_lower"].str.contains("cost of")]
-        per_month = non_cogs.groupby("month")["value"].apply(lambda s: float(s.abs().sum()))
-        avg_opex = float(per_month[per_month > 0].mean()) if any(per_month > 0) else None
-    opex_period = (avg_opex * 3) if avg_opex else None
+    # Full 12-month OPEX, excluding Cost of Sales and Marketing — marketing is already
+    # counted once via ad spend, so it must not be doubled from Xero's marketing accounts.
+    opex_period = None
+    me = d.monthly_expenses
+    if me is not None and not me.empty and "bucket_section" in me.columns:
+        oi = me["is_other_income"].fillna(False) if "is_other_income" in me.columns else False
+        opex_rows = me[(~me["bucket_section"].isin(["Cost of Sales", "Marketing"])) & (~oi)]
+        opex_period = float(opex_rows["value"].abs().sum())
 
     scenarios = [
         ("Actual", actual_amer, ad_spend, nc_perf),
@@ -60,16 +67,17 @@ def compute(bundle) -> RenderTree:
                 cells.append(text_cell(coord, str(v) if v is not None else "—"))
         return make_row(cells)
 
-    tree.rows.append(row("aMER", [s[1] for s in scenarios], fmt="money", tooltip=Tooltip(formula="Revenue / Ad Spend")))
-    tree.rows.append(row("Ad Spend (NC, period)", [s[2] for s in scenarios], fmt="money",
-                         tooltip=Tooltip(formula="NC Revenue / aMER")))
-    tree.rows.append(row("NC Revenue", [s[3] for s in scenarios], fmt="money",
-                         tooltip=Tooltip(formula="Constant — fixed at actual NC revenue.", sources=["NC/RC"])))
+    tree.rows.append(row("aMER", [f"{s[1]:.2f}x" if s[1] is not None else None for s in scenarios], fmt="text",
+                         tooltip=Tooltip(formula="NC Revenue / Ad Spend (acquisition MER).")))
+    tree.rows.append(row("Ad Spend (12-month)", [s[2] for s in scenarios], fmt="money",
+                         tooltip=Tooltip(formula="Actual = 12-month platform spend; scenarios = NC Revenue / target aMER.")))
+    tree.rows.append(row("NC Revenue (12-month)", [s[3] for s in scenarios], fmt="money",
+                         tooltip=Tooltip(formula="Constant — fixed at 12-month new-customer revenue (incl. tax).", sources=["NC/RC"])))
 
     # COGS rows
     cogs_row = [nc_cogs for _ in scenarios]
-    tree.rows.append(row("NC COGS (Shopify product)", cogs_row, fmt="money",
-                         tooltip=Tooltip(formula="NC COGS, held constant.", gotcha_refs=["G39"])))
+    tree.rows.append(row("NC COGS (12-month)", cogs_row, fmt="money",
+                         tooltip=Tooltip(formula="New-customer product COGS over 12 months, held constant.", gotcha_refs=["G39"])))
 
     # Profit
     profits = []
@@ -78,18 +86,18 @@ def compute(bundle) -> RenderTree:
             profits.append(None)
             continue
         profits.append(rev - nc_cogs - ad - opex_period)
-    tree.rows.append(row("Period Profit", profits, fmt="money",
-                         tooltip=Tooltip(formula="Revenue − COGS − Ad − OPEX(period)",
-                                         inputs=[("OPEX", opex_period)],
-                                         confidence_note="OPEX derived from avg posted month × 3.")))
+    tree.rows.append(row("Period Profit (12-month)", profits, fmt="money",
+                         tooltip=Tooltip(formula="NC Revenue − NC COGS − Ad Spend − OPEX",
+                                         inputs=[("OPEX (12-mo, excl. mktg)", opex_period)],
+                                         confidence_note="Full 12-month OPEX, excluding Cost of Sales and Marketing (ad spend counted separately). New-customer view — excludes returning-customer revenue.")))
 
     cmps = [safe_div(p, s[3]) if (p is not None and s[3]) else None for p, s in zip(profits, scenarios)]
     tree.rows.append(row("Profit %", cmps, fmt="pct",
                          tooltip=Tooltip(formula="Profit / Revenue")))
 
-    if d.snapshot_window:
-        period_days = (d.snapshot_window[1] - d.snapshot_window[0]).days + 1
-        if period_days < 85:
-            tree.banners.append(Banner(severity="warning",
-                text=f"Projections built from a {period_days}-day NC/RC window — sample-thin."))
+    tree.banners.append(Banner(severity="info",
+        text=("New-customer acquisition view over the full 12 months: NC Revenue and NC COGS are held "
+              "constant while ad spend flexes to each target aMER. Profit applies full-company OPEX "
+              "(excl. marketing) against new-customer revenue, so it is a deliberately conservative floor — "
+              "returning-customer revenue would add on top.")))
     return tree

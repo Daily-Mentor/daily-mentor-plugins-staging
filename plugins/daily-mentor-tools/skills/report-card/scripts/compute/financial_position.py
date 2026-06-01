@@ -51,7 +51,15 @@ def compute(bundle) -> RenderTree:
     tree.columns = ["Account", "Balance"]
 
     # ---- Pre-compute the key buckets ----
-    bank_rows = _all_rows_matching(snapshot[snapshot["section"] == "Assets"], _BANK_KEYWORDS)
+    # Cash on hand = the accounts Xero groups under the 'Bank' sub-heading. The
+    # 'Total Bank' line is excluded at parse time because Xero often exports it as 0,
+    # so we sum the child accounts directly. Fall back to keyword matching only when
+    # the sub-section wasn't captured (older exports / unusual layouts).
+    bank_rows = pd.DataFrame()
+    if "subsection" in snapshot.columns:
+        bank_rows = snapshot[snapshot["subsection"].astype(str).str.lower() == "bank"]
+    if bank_rows.empty:
+        bank_rows = _all_rows_matching(snapshot[snapshot["section"] == "Assets"], _BANK_KEYWORDS)
     cc_rows = _all_rows_matching(snapshot, _CC_KEYWORDS)
     # Exclude credit-card rows from the bank list
     bank_only = bank_rows[~bank_rows["account"].str.lower().str.contains("credit card", na=False)]
@@ -220,8 +228,14 @@ def compute(bundle) -> RenderTree:
                 "YTD result positive",
                 f"Current Year Earnings = {cy_earn:,.0f}."))
 
-    # Inventory days of cover
-    if inventory and monthly_revenue_avg and monthly_revenue_avg > 0:
+    # Inventory days of cover — only meaningful for a positive stock balance.
+    if inventory < 0:
+        flags.append(("warning",
+            "Negative inventory balance",
+            f"Inventory on the balance sheet is {inventory:,.0f} — a negative stock asset. This usually means COGS "
+            f"recognition has outrun recorded purchases or a stock-take is overdue. Days-of-cover can't be computed "
+            f"until the balance is corrected."))
+    elif inventory and monthly_revenue_avg and monthly_revenue_avg > 0:
         cogs_pct = 0.30
         if not d.monthly_revenue_components.empty and "cogs_aud" in d.monthly_revenue_components.columns and "net_aud" in d.monthly_revenue_components.columns:
             tot_cogs = float(d.monthly_revenue_components["cogs_aud"].sum())
