@@ -32,31 +32,37 @@ def compute(bundle) -> RenderTree:
         tree.banners.append(Banner(severity="error", text="Shopify daily file missing — Daily Tracker cannot render."))
         return tree
 
-    # The Shopify 'Total Sales Over Time' export usually carries no per-day COGS column.
-    # When it's absent we can't deduct product cost daily, so the COGS column shows '—'
-    # and the bottom line is a Pre-COGS Contribution (After Fees − Ad − Refunds − Op Cost).
-    has_daily_cogs = ("cogs_aud" in bundle.shopify_daily.columns
-                      and float(bundle.shopify_daily["cogs_aud"].abs().sum()) > 0)
-    profit_label = "Profit" if has_daily_cogs else "Pre-COGS Contribution"
-    tree.columns = ["Date", "Orders", "Units", "Gross Sales", "After Fees", "Ad Spend",
-                    ("COGS" if has_daily_cogs else "COGS (n/a)"), "Refunds", "Op Cost",
-                    "AOV", "CPA", "ROAS", profit_label, profit_label + " %"]
-    if not has_daily_cogs:
-        tree.banners.append(Banner(severity="warning",
-            text=("Daily product COGS isn't in the Shopify 'Total Sales Over Time' export, so the COGS column "
-                  "shows '—' and the bottom line is a Pre-COGS Contribution (After Fees − Ad − Refunds − Op Cost). "
-                  "Full-period COGS is on the Monthly P&L (from Xero).")))
+    # COGS and OPEX come from Account Transactions (the atxn-derived P&L), per month:
+    #   • COGS = Xero 'Cost of Sales' lines, allocated to each day in proportion to that
+    #            day's share of the month's gross sales (cost follows revenue).
+    #   • OPEX = Xero operating expenses EXCLUDING Cost of Sales and Marketing (ad spend is
+    #            counted separately from the platform CSVs), spread evenly across the month's days.
+    me = d.monthly_expenses if d.monthly_expenses is not None else None
+    month_cogs: dict[date, float] = {}
+    month_opex: dict[date, float] = {}
+    if me is not None and not me.empty and "bucket_section" in me.columns:
+        oi = me["is_other_income"].fillna(False) if "is_other_income" in me.columns else False
+        cos = me[me["bucket_section"] == "Cost of Sales"]
+        month_cogs = cos.groupby("month")["value"].apply(lambda s: float(s.abs().sum())).to_dict()
+        opex_rows = me[(~me["bucket_section"].isin(["Cost of Sales", "Marketing"])) & (~oi)]
+        month_opex = opex_rows.groupby("month")["value"].apply(lambda s: float(s.abs().sum())).to_dict()
+    has_cogs = bool(month_cogs)
+    atxn_src = Path(meta.files_found.get("xero_atxn", "")).name or "Xero Account Transactions"
 
-    # Op cost per day: avg posted OPEX × (days posted total) — but simpler: avg per-month / days-in-month.
-    daily_op_cost = None
-    if not d.monthly_expenses.empty and d.posted_months:
-        non_cogs = d.monthly_expenses[~d.monthly_expenses["account_lower"].str.contains("cost of")]
-        per_month_opex = non_cogs.groupby("month")["value"].apply(lambda s: float(s.abs().sum()))
-        # Estimate avg daily opex via the months posted
-        posted_opex_total = float(per_month_opex[per_month_opex > 0].sum())
-        posted_days = sum((date(m.year + (m.month // 12), (m.month % 12) + 1, 1) - m).days for m in d.posted_months)
-        if posted_days > 0:
-            daily_op_cost = posted_opex_total / posted_days
+    profit_label = "Profit" if has_cogs else "Pre-COGS Contribution"
+    tree.columns = ["Date", "Orders", "Units", "Gross Sales", "After Fees", "Ad Spend",
+                    ("COGS" if has_cogs else "COGS (n/a)"), "Refunds", "Op Cost",
+                    "AOV", "CPA", "ROAS", profit_label, profit_label + " %"]
+    if has_cogs:
+        tree.banners.append(Banner(severity="info",
+            text=("Daily P&L: COGS and OPEX both come from Account Transactions (Xero). COGS = each month's "
+                  "Cost of Sales allocated by the day's share of gross sales; OPEX = each month's operating "
+                  "expenses (excl. Cost of Sales and Marketing — ad spend is counted separately) spread evenly "
+                  "across the month's days. Monthly totals tie back to the Monthly P&L.")))
+    else:
+        tree.banners.append(Banner(severity="warning",
+            text=("No Cost-of-Sales lines in Account Transactions, so daily COGS can't be built — the bottom line "
+                  "is a Pre-COGS Contribution (After Fees − Ad − Refunds − Op Cost).")))
 
     # Daily ad spend lookup
     ad_by_day = {}
@@ -77,9 +83,11 @@ def compute(bundle) -> RenderTree:
         tot_gross = float(group["gross_aud"].sum())
         tot_after = tot_gross * after_fees_factor
         tot_ad = float(sum(ad_by_day.get(day, 0) for day in group["day"]))
-        tot_cogs = float(group["cogs_aud"].sum()) if "cogs_aud" in group.columns else 0
+        tot_cogs = month_cogs.get(month_key, 0.0)
         tot_refunds = float(group["returns_aud"].sum()) if "returns_aud" in group.columns else 0
-        tot_op = (daily_op_cost or 0) * len(group)
+        tot_op = month_opex.get(month_key, 0.0)
+        n_days = len(group)
+        daily_opex = (tot_op / n_days) if n_days else 0.0
         tot_profit = tot_after - tot_cogs - tot_ad - abs(tot_refunds) - tot_op
         tot_aov = safe_div(tot_gross, tot_orders)
         tot_cpa = safe_div(tot_ad, tot_orders)
@@ -93,10 +101,10 @@ def compute(bundle) -> RenderTree:
             money_cell(f"dt.{month_key}.tot.gross", tot_gross, tooltip=Tooltip(formula="Sum of daily gross ×FX", sources=[shopify_src], gotcha_refs=["G39"])),
             money_cell(f"dt.{month_key}.tot.after", tot_after, tooltip=Tooltip(formula=f"Gross × {after_fees_factor}", confidence_note="After-fees factor is a mentor default; tune per client.")),
             money_cell(f"dt.{month_key}.tot.ad", tot_ad, tooltip=Tooltip(formula="Sum of platform daily ad spend ×FX", sources=[ad_src], gotcha_refs=["G39"])),
-            (money_cell(f"dt.{month_key}.tot.cogs", tot_cogs, tooltip=Tooltip(formula="Sum of Shopify daily COGS ×FX", sources=[shopify_src], confidence_note="Shopify product-COGS only."))
-             if has_daily_cogs else text_cell(f"dt.{month_key}.tot.cogs", "—")),
+            (money_cell(f"dt.{month_key}.tot.cogs", tot_cogs, tooltip=Tooltip(formula="Month's Cost of Sales from Account Transactions (Xero)", sources=[atxn_src], confidence_note="Xero Cost of Sales (product COGS + freight/packaging/fees)."))
+             if has_cogs else text_cell(f"dt.{month_key}.tot.cogs", "—")),
             money_cell(f"dt.{month_key}.tot.refunds", abs(tot_refunds), tooltip=Tooltip(formula="abs sum of Returns ×FX", sources=[shopify_src])),
-            money_cell(f"dt.{month_key}.tot.op", tot_op, tooltip=Tooltip(formula="Avg daily OPEX × days in month", inputs=[("Avg daily", daily_op_cost), ("Days", len(group))], confidence_note="Derived from posted-OPEX average.")),
+            money_cell(f"dt.{month_key}.tot.op", tot_op, tooltip=Tooltip(formula="Month's operating expenses (excl. Cost of Sales & Marketing) from Account Transactions", sources=[atxn_src], confidence_note="Marketing excluded — ad spend is counted separately.")),
             money_cell(f"dt.{month_key}.tot.aov", tot_aov, decimals=2, tooltip=Tooltip(formula="Gross / Orders")),
             money_cell(f"dt.{month_key}.tot.cpa", tot_cpa, decimals=2, tooltip=Tooltip(formula="Ad Spend / Orders")),
             money_cell(f"dt.{month_key}.tot.roas", tot_roas, decimals=2, tooltip=Tooltip(formula="Gross / Ad Spend")),
@@ -112,9 +120,10 @@ def compute(bundle) -> RenderTree:
             units = int(day_row["units"]) if "units" in day_row else 0
             after = gross * after_fees_factor
             ad = float(ad_by_day.get(day, 0))
-            cogs = float(day_row["cogs_aud"]) if "cogs_aud" in day_row else 0
+            # COGS follows revenue: the day's share of the month's gross sales × month COGS.
+            cogs = (tot_cogs * (gross / tot_gross)) if (has_cogs and tot_gross > 0) else 0.0
             refunds = float(day_row["returns_aud"]) if "returns_aud" in day_row else 0
-            op = daily_op_cost or 0
+            op = daily_opex
             profit = after - cogs - ad - abs(refunds) - op
             aov = safe_div(gross, orders)
             cpa = safe_div(ad, orders)
@@ -132,14 +141,15 @@ def compute(bundle) -> RenderTree:
                 money_cell(f"dt.{day}.ad", ad, decimals=2, tooltip=Tooltip(
                     formula="Sum of platform spend for this day ×FX", sources=[ad_src], gotcha_refs=["G39"])),
                 (money_cell(f"dt.{day}.cogs", cogs, decimals=2, tooltip=Tooltip(
-                    formula="Shopify product COGS for this day ×FX", sources=[shopify_src]))
-                 if has_daily_cogs else text_cell(f"dt.{day}.cogs", "—")),
+                    formula="Month's Cost of Sales (Account Transactions) × this day's share of monthly gross sales",
+                    sources=[atxn_src], confidence_note="Allocated by sales share; monthly total ties to the Monthly P&L."))
+                 if has_cogs else text_cell(f"dt.{day}.cogs", "—")),
                 money_cell(f"dt.{day}.refunds", abs(refunds), decimals=2, tooltip=Tooltip(
                     formula="abs(Returns) for this day ×FX", sources=[shopify_src])),
                 money_cell(f"dt.{day}.op", op, decimals=2, tooltip=Tooltip(
-                    formula="Posted-OPEX total / posted days (flat allocation)",
-                    inputs=[("Per day", daily_op_cost)],
-                    confidence_note="Provisional — daily allocation of average monthly OPEX.")),
+                    formula="Month's OPEX (Account Transactions, excl. Cost of Sales & Marketing) ÷ days in month",
+                    sources=[atxn_src],
+                    confidence_note="Even daily allocation of the month's operating expenses.")),
                 money_cell(f"dt.{day}.aov", aov, decimals=2, tooltip=Tooltip(formula="Gross / Orders")),
                 money_cell(f"dt.{day}.cpa", cpa, decimals=2, tooltip=Tooltip(formula="Ad / Orders")),
                 money_cell(f"dt.{day}.roas", roas, decimals=2, tooltip=Tooltip(formula="Gross / Ad")),

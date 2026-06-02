@@ -228,13 +228,29 @@ def _read_cohort(path: Path) -> pd.DataFrame | None:
     rows: list[dict] = []
     if months_since_col is not None:
         value_col = None
+        kind = "value"
         for col in raw.columns:
             cl = col.lower()
             if any(k in cl for k in ("amount", "value", "spent", "revenue", "ltv")):
                 value_col = col
+                kind = "value"
                 break
         if value_col is None:
+            # Retention-style cohort (Shopify 'Customer retention rate' export): no $
+            # column, but a retention-rate column we can turn into an LTV curve later.
+            for col in raw.columns:
+                cl = col.lower()
+                if "retention" in cl or cl.endswith("rate"):
+                    value_col = col
+                    kind = "retention"
+                    break
+        if value_col is None:
             return None
+        size_col = None
+        for col in raw.columns:
+            if "in cohort" in col.lower() or col.lower() in ("cohort size", "customers in cohort"):
+                size_col = col
+                break
         for _, r in raw.iterrows():
             try:
                 off = int(float(str(r[months_since_col]).strip().lower().lstrip("m").strip()))
@@ -243,7 +259,11 @@ def _read_cohort(path: Path) -> pd.DataFrame | None:
             val = pd.to_numeric(r[value_col], errors="coerce")
             if pd.isna(val):
                 continue
-            rows.append({"cohort": str(r[cohort_col]).strip(), "month_offset": off, "value": float(val)})
+            row = {"cohort": str(r[cohort_col]).strip(), "month_offset": off, "value": float(val), "kind": kind}
+            if size_col is not None:
+                sz = pd.to_numeric(r[size_col], errors="coerce")
+                row["cohort_size"] = float(sz) if not pd.isna(sz) else None
+            rows.append(row)
     else:
         # WIDE layout: detect month-offset columns by header pattern.
         offset_cols: list[tuple[str, int]] = []
@@ -265,7 +285,10 @@ def _read_cohort(path: Path) -> pd.DataFrame | None:
 
     if not rows:
         return None
-    return pd.DataFrame(rows).sort_values(["cohort", "month_offset"]).reset_index(drop=True)
+    df = pd.DataFrame(rows).sort_values(["cohort", "month_offset"]).reset_index(drop=True)
+    if "kind" not in df.columns:
+        df["kind"] = "value"
+    return df
 
 
 def _read_sessions(path: Path) -> pd.DataFrame:

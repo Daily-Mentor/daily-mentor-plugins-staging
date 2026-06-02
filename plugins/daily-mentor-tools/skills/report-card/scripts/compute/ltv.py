@@ -16,6 +16,8 @@ import json
 from datetime import date
 from pathlib import Path
 
+import pandas as pd
+
 from ..models import Banner, RenderTree, Tooltip
 from .helpers import make_row, money_cell, pct_cell, safe_div, section_cell, text_cell
 
@@ -65,7 +67,7 @@ def _mode_a_cohort(bundle, tree: RenderTree) -> RenderTree:
     with _BENCHMARKS_PATH.open() as f:
         bm = json.load(f).get("growth", {})
 
-    tree.subtitle = "Cumulative customer value by acquisition cohort (Shopify Cohort Analysis)."
+    kind = str(cohort["kind"].iloc[0]) if "kind" in cohort.columns else "value"
 
     offsets = sorted(cohort["month_offset"].unique().tolist())
     max_off = min(max(offsets), 5) if offsets else 0
@@ -74,7 +76,40 @@ def _mode_a_cohort(bundle, tree: RenderTree) -> RenderTree:
 
     tree.columns = ["Cohort"] + [f"Month {o}" for o in shown]
 
-    pivot = cohort.pivot_table(index="cohort", columns="month_offset", values="value", aggfunc="mean")
+    if kind == "retention":
+        # Retention cohort (repeat-purchase rate by months since first order). Convert it
+        # to a cumulative customer-value curve: orders per acquired customer through Month N
+        # = 1 (the acquisition order) + Σ repeat-rate over Months 1..N; value = orders × AOV.
+        # The growth-vs-Month-0 ratio is AOV-independent (it's just the cumulative repeat rate).
+        d = bundle.derived
+        aov = 1.0
+        mrc = d.monthly_revenue_components
+        if mrc is not None and not mrc.empty and "net_aud" in mrc.columns and "orders" in mrc.columns:
+            tot_orders = float(mrc["orders"].sum())
+            if tot_orders > 0:
+                aov = float(mrc["net_aud"].sum()) / tot_orders
+        rpivot = cohort.pivot_table(index="cohort", columns="month_offset", values="value", aggfunc="mean")
+        all_offsets = sorted(cohort["month_offset"].unique().tolist())
+        data = {}
+        for c in cohorts:
+            cum_orders = 1.0
+            prev = None
+            for o in all_offsets:
+                if o == 0:
+                    val = 1.0  # acquisition order only
+                else:
+                    r = rpivot.loc[c, o] if (c in rpivot.index and o in rpivot.columns) else None
+                    if r is not None and r == r:  # not NaN
+                        cum_orders += float(r)
+                        prev = cum_orders
+                    val = prev if prev is not None else cum_orders
+                data.setdefault(o, {})[c] = val * aov
+        # pd.DataFrame({offset: {cohort: val}}) → index = cohort, columns = offset.
+        pivot = pd.DataFrame(data)
+        tree.subtitle = "Cumulative customer value by acquisition cohort — derived from repeat-retention × blended AOV."
+    else:
+        pivot = cohort.pivot_table(index="cohort", columns="month_offset", values="value", aggfunc="mean")
+        tree.subtitle = "Cumulative customer value by acquisition cohort (Shopify Cohort Analysis)."
 
     for c in cohorts:
         cells = [text_cell(f"ltv.{c}.lbl", str(c), indent=1)]
@@ -127,14 +162,26 @@ def _mode_a_cohort(bundle, tree: RenderTree) -> RenderTree:
         row += [text_cell(f"ltv.m5.pad{i}", "✓" if ok else "✗" if m5 is not None else "—") if i == 0 else text_cell(f"ltv.m5.pad{i}", "") for i in range(len(shown) - 1)]
         tree.rows.append(make_row(row))
 
-    tree.banners.append(Banner(severity="info",
-        text=f"True cohort retention from {src}. Each cell is cumulative customer value at that month since first purchase. The blended growth row feeds the Final Report Card M2/M5 benchmarks."))
-    tree.notes = [
-        "Cohort = the month a customer first purchased. Columns track that group's cumulative spend over their lifetime.",
-        "Recent cohorts have fewer months of history, so later-month cells are blank — the blended row only averages cohorts deep enough to have each offset.",
-    ]
-    # Stash blended growth so the Final Report Card can read it.
-    bundle.derived.ltv_growth = blended_growth
+    if kind == "retention":
+        tree.banners.append(Banner(severity="info",
+            text=(f"Derived from the retention cohort in {src}: each customer's cumulative value = "
+                  f"(1 acquisition order + cumulative repeat-purchase rate) × blended AOV. The growth-vs-Month-0 "
+                  f"row is the cumulative repeat rate (AOV-independent) and feeds the Final Report Card M2/M5 benchmarks.")))
+        tree.notes = [
+            "Source export reports repeat-purchase retention by months since first order, not dollar value — value is reconstructed using the blended AOV.",
+            "Month-0 = the acquisition order (index 1.0 × AOV). Later months add the cohort's cumulative repeat rate.",
+            "Growth vs Month 0 (and the M2/M5 benchmarks) depends only on retention, so it holds regardless of the AOV assumption.",
+            "Recent cohorts have fewer months of history, so later-month cells are blank — the blended row only averages cohorts deep enough to have each offset.",
+        ]
+    else:
+        tree.banners.append(Banner(severity="info",
+            text=f"True cohort value from {src}. Each cell is cumulative customer value at that month since first purchase. The blended growth row feeds the Final Report Card M2/M5 benchmarks."))
+        tree.notes = [
+            "Cohort = the month a customer first purchased. Columns track that group's cumulative spend over their lifetime.",
+            "Recent cohorts have fewer months of history, so later-month cells are blank — the blended row only averages cohorts deep enough to have each offset.",
+        ]
+    # Stash blended growth so the Final Report Card can read it (plain floats, not np types).
+    bundle.derived.ltv_growth = {k: (float(v) if v is not None else None) for k, v in blended_growth.items()}
     return tree
 
 

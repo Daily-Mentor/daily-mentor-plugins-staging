@@ -169,7 +169,11 @@ def compute(bundle) -> RenderTree:
 
     # ===== Helper for benchmark rows =====
     def status_str(ok: bool | None) -> str:
-        return "✓" if ok else ("✗" if ok is False else "—")
+        # `ok` may be a numpy bool (from pandas comparisons), so test for None
+        # explicitly rather than `ok is False` (which is never True for np.bool_).
+        if ok is None:
+            return "—"
+        return "✓" if ok else "✗"
 
     def bleed_and_fix(actual_pct, target_pct, *, max_target: bool):
         """Return (bleed_dollars, fix_text). Bleed positive = $ over (max target) or $ under (min target)."""

@@ -1,7 +1,7 @@
 ---
 name: report-card
 description: Use when the user invokes /report-card, asks to build a report card or e-commerce diagnostic, or refers to a standardised input pack (Shopify CSVs + Xero exports + ad-platform CSVs). Brand-neutral — works for any e-commerce client. Produces a 12-tab HTML (founder-facing, tooltips) plus xlsx fallback (mentor weekly-call use).
-version: 0.4.2
+version: 0.4.3
 ---
 
 # Report Card Builder
