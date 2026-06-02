@@ -209,9 +209,15 @@ def compute(bundle) -> RenderTree:
             pct_cell(f"frc.b.{name}.a", actual, tooltip=tooltip) if actual_fmt == "pct"
             else money_cell(f"frc.b.{name}.a", actual, tooltip=tooltip, decimals=2)
         )
-        target_label = target_str or (
-            f"< {target_pct*100:.0f}%" if max_target else f"> {target_pct*100:.0f}%"
-        )
+        # Keep the target's decimal (e.g. 2.5%) — rounding it to a whole number made
+        # a passing-looking number read as a fail (2.3% vs a "2%" label that was really 2.5%).
+        if target_str:
+            target_label = target_str
+        elif target_pct is not None:
+            _tp = f"{target_pct*100:.1f}".rstrip("0").rstrip(".")
+            target_label = f"< {_tp}%" if max_target else f"> {_tp}%"
+        else:
+            target_label = "—"
         bleed_cell = (
             money_cell(f"frc.b.{name}.b", bleed, tooltip=Tooltip(
                 formula=("Excess over cap × Revenue" if max_target else "Shortfall under floor × Revenue"),
