@@ -13,6 +13,12 @@ _CSS = (_PLUGIN_ROOT / "templates" / "static" / "report.css").read_text()
 _JS = (_PLUGIN_ROOT / "templates" / "static" / "report.js").read_text()
 
 
+def _colorize_status(s: str) -> str:
+    """Green ✓ / red ✗ wherever a status glyph appears (benchmark pass/fail)."""
+    return (s.replace("✓", '<span class="status-pass">✓</span>')
+             .replace("✗", '<span class="status-fail">✗</span>'))
+
+
 def _fmt_value(c: Cell) -> str:
     if c.value is None or c.is_missing:
         return '<span class="missing">—</span>'
@@ -26,8 +32,8 @@ def _fmt_value(c: Cell) -> str:
         try:
             return f"{int(c.value):,}"
         except (TypeError, ValueError):
-            return html.escape(str(c.value))
-    return html.escape(str(c.value))
+            return _colorize_status(html.escape(str(c.value)))
+    return _colorize_status(html.escape(str(c.value)))
 
 
 def _render_tooltip(t: Tooltip, confidence: str) -> str:

@@ -386,3 +386,7 @@ td:first-child .cell-wrap { justify-content: flex-start; }
 .mentor-unit { font-size: 0.78rem; color: #6c707a; }
 .mentor-status.pass { color: #1a8c4a; font-weight: 700; }
 .mentor-status.fail { color: #d23f3f; font-weight: 700; }
+
+/* Benchmark pass/fail glyphs (✓ green / ✗ red) — standard across all tabs */
+.status-pass { color: #1a8c4a; font-weight: 700; }
+.status-fail { color: #d23f3f; font-weight: 700; }
