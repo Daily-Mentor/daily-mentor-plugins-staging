@@ -8,6 +8,36 @@
       s.classList.toggle('active', s.dataset.tab === name);
     });
   }
+
+  // Mentor-entered benchmark inputs: compare the typed value to its target live,
+  // flip the sibling status cell ✓/✗, and persist to localStorage.
+  function evalMentor(input){
+    const key = input.dataset.mentorKey;
+    const status = document.querySelector('.mentor-status[data-mentor-status="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]');
+    const raw = input.value.trim();
+    const target = parseFloat(input.dataset.target);
+    if (status){ status.classList.remove('pass','fail'); }
+    if (raw === '' || isNaN(parseFloat(raw))){
+      if (status){ status.textContent = '—'; }
+      return;
+    }
+    const val = parseFloat(raw);
+    if (!isNaN(target)){
+      const ok = input.dataset.dir === 'max' ? (val <= target) : (val >= target);
+      if (status){ status.textContent = ok ? '✓' : '✗'; status.classList.add(ok ? 'pass' : 'fail'); }
+    }
+  }
+  function initMentor(){
+    document.querySelectorAll('input.mentor-input').forEach(input => {
+      const sk = 'mentor:' + input.dataset.mentorKey;
+      try { const saved = localStorage.getItem(sk); if (saved !== null) input.value = saved; } catch(e){}
+      evalMentor(input);
+      input.addEventListener('input', () => {
+        try { localStorage.setItem(sk, input.value); } catch(e){}
+        evalMentor(input);
+      });
+    });
+  }
   document.addEventListener('DOMContentLoaded', function(){
     document.querySelectorAll('nav.rc-tabs button').forEach(b => {
       b.addEventListener('click', () => activate(b.dataset.tab));
@@ -30,5 +60,6 @@
       const first = group.querySelector('button');
       if (first) first.click();
     });
+    initMentor();
   });
 })();

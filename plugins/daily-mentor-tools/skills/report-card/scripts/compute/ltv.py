@@ -62,126 +62,155 @@ def compute(bundle) -> RenderTree:
 
 def _mode_a_cohort(bundle, tree: RenderTree) -> RenderTree:
     meta = bundle.meta
+    d = bundle.derived
     cohort = bundle.cohort
     src = Path(meta.files_found.get("cohort", "")).name or "Shopify Cohort Analysis"
-    with _BENCHMARKS_PATH.open() as f:
-        bm = json.load(f).get("growth", {})
+    nc_src = Path(meta.files_found.get("nc_rc", "")).name or "NC/RC export"
+    ad_src = Path(meta.files_found.get("ad_spend_meta", "")).name or "ad-platform CSVs"
 
     kind = str(cohort["kind"].iloc[0]) if "kind" in cohort.columns else "value"
 
-    offsets = sorted(cohort["month_offset"].unique().tolist())
-    max_off = min(max(offsets), 5) if offsets else 0
-    shown = [o for o in offsets if o <= max_off]
-    cohorts = sorted(cohort["cohort"].unique().tolist())
+    # ---- Economic inputs (full 12-month) ----
+    nc_rc = bundle.nc_rc
 
-    tree.columns = ["Cohort"] + [f"Month {o}" for o in shown]
+    def _seg_perf_aov(seg: str):
+        if nc_rc is None or nc_rc.empty:
+            return 0.0, 0
+        r = nc_rc[nc_rc["segment"].str.lower() == seg]
+        if r.empty:
+            return 0.0, 0
+        orders = float(r["orders"].sum())
+        perf = float((r["gross"] + r["discounts"] + r["shipping"] + r["taxes"]).sum())
+        return (perf / orders if orders else 0.0), int(orders)
 
+    nc_aov, nc_orders = _seg_perf_aov("new")     # incl tax
+    rc_aov, _ = _seg_perf_aov("returning")        # incl tax
+
+    mrc = d.monthly_revenue_components
+    net = float(mrc["net_aud"].sum()) if (mrc is not None and not mrc.empty and "net_aud" in mrc.columns) else 0.0
+    tax = float(mrc["taxes_aud"].sum()) if (mrc is not None and not mrc.empty and "taxes_aud" in mrc.columns) else 0.0
+    gross = float(mrc["gross_aud"].sum()) if (mrc is not None and not mrc.empty and "gross_aud" in mrc.columns) else 0.0
+    returns = abs(float(mrc["returns_aud"].sum())) if (mrc is not None and not mrc.empty and "returns_aud" in mrc.columns) else 0.0
+    tax_rate = (tax / net) if net else 0.0
+    me = d.monthly_expenses
+    cogs = float(me[me["bucket_section"] == "Cost of Sales"]["value"].abs().sum()) if (me is not None and not me.empty and "bucket_section" in me.columns) else 0.0
+    cogs_rate = (cogs / net) if net else 0.0
+    returns_rate = (returns / gross) if gross else 0.0
+    gmpo = cogs_rate + returns_rate  # cost-to-fulfill fraction (COGS% + Returns%)
+    ad_spend = float(d.daily_ad_spend["amount"].sum()) if (d.daily_ad_spend is not None and not d.daily_ad_spend.empty) else 0.0
+    cac = (ad_spend / nc_orders) if nc_orders else 0.0
+    amer = (nc_aov / cac) if cac else 0.0
+
+    if not nc_aov:
+        tree.banners.append(Banner(severity="error",
+            text="NC/RC export missing New-customer rows — cannot build the LTV economics."))
+        tree.subtitle = "LTV Analysis"
+        return tree
+
+    # ---- Cumulative customer value (incl tax) curve: First Order + Month 0..5 ----
+    # Retention cohort → value(N) = NC AOV + Σ retention(0..N) × RC AOV (repeats are valued
+    # at the returning-customer AOV, which is what they actually spend). Value cohort → use
+    # the supplied cumulative customer value directly.
+    max_off = 5
+    rp = cohort.pivot_table(index="cohort", columns="month_offset", values="value", aggfunc="mean")
     if kind == "retention":
-        # Retention cohort (repeat-purchase rate by months since first order). Convert it
-        # to a cumulative customer-value curve: orders per acquired customer through Month N
-        # = 1 (the acquisition order) + Σ repeat-rate over Months 1..N; value = orders × AOV.
-        # The growth-vs-Month-0 ratio is AOV-independent (it's just the cumulative repeat rate).
-        d = bundle.derived
-        aov = 1.0
-        mrc = d.monthly_revenue_components
-        if mrc is not None and not mrc.empty and "net_aud" in mrc.columns and "orders" in mrc.columns:
-            tot_orders = float(mrc["orders"].sum())
-            if tot_orders > 0:
-                aov = float(mrc["net_aud"].sum()) / tot_orders
-        rpivot = cohort.pivot_table(index="cohort", columns="month_offset", values="value", aggfunc="mean")
-        all_offsets = sorted(cohort["month_offset"].unique().tolist())
-        data = {}
-        for c in cohorts:
-            cum_orders = 1.0
-            prev = None
-            for o in all_offsets:
-                if o == 0:
-                    val = 1.0  # acquisition order only
-                else:
-                    r = rpivot.loc[c, o] if (c in rpivot.index and o in rpivot.columns) else None
-                    if r is not None and r == r:  # not NaN
-                        cum_orders += float(r)
-                        prev = cum_orders
-                    val = prev if prev is not None else cum_orders
-                data.setdefault(o, {})[c] = val * aov
-        # pd.DataFrame({offset: {cohort: val}}) → index = cohort, columns = offset.
-        pivot = pd.DataFrame(data)
-        tree.subtitle = "Cumulative customer value by acquisition cohort — derived from repeat-retention × blended AOV."
+        ret = {o: float(rp[o].mean()) for o in rp.columns if rp[o].notna().any()}
+        first_order = nc_aov
+        cv = []  # Month 0..5 cumulative customer value (incl tax)
+        cum = nc_aov
+        for o in range(0, max_off + 1):
+            cum += ret.get(o, 0.0) * rc_aov
+            cv.append(cum)
+        repeat_basis = "retention"
     else:
-        pivot = cohort.pivot_table(index="cohort", columns="month_offset", values="value", aggfunc="mean")
-        tree.subtitle = "Cumulative customer value by acquisition cohort (Shopify Cohort Analysis)."
+        first_order = float(rp[0].mean()) if 0 in rp.columns else nc_aov
+        cv = [float(rp[o].mean()) if o in rp.columns and rp[o].notna().any() else None for o in range(0, max_off + 1)]
+        repeat_basis = "value"
 
-    for c in cohorts:
-        cells = [text_cell(f"ltv.{c}.lbl", str(c), indent=1)]
-        for o in shown:
-            v = float(pivot.loc[c, o]) if (c in pivot.index and o in pivot.columns and pivot.loc[c, o] == pivot.loc[c, o]) else None
-            m0 = float(pivot.loc[c, 0]) if (c in pivot.index and 0 in pivot.columns and pivot.loc[c, 0] == pivot.loc[c, 0]) else None
-            growth = safe_div((v - m0) if (v is not None and m0 is not None) else None, m0) if m0 else None
-            cells.append(money_cell(f"ltv.{c}.{o}", v, decimals=2, tooltip=Tooltip(
-                formula=f"Cumulative customer value at Month {o} for the {c} cohort.",
-                result_expr=(f"+{growth*100:.0f}% vs Month 0" if growth is not None and o > 0 else None),
-                sources=[src],
-            )))
-        tree.rows.append(make_row(cells))
+    col_vals = [first_order] + cv                              # 7 entries
+    col_labels = ["First Order"] + [f"Month {o}" for o in range(0, max_off + 1)]
+    ncols = len(col_vals)
+    tree.columns = ["Metric"] + col_labels
+    tree.subtitle = "Customer lifetime value, contribution margin and return on acquisition spend (full 12-month basis)."
 
-    # Blended %-growth-vs-Month-0 row (averaged across cohorts deep enough to have each offset)
-    growth_cells = [text_cell("ltv.growth.lbl", "Blended % increase vs Month 0", bold=True)]
-    blended_growth: dict[int, float | None] = {}
-    for o in shown:
-        if o == 0:
-            blended_growth[o] = 0.0
-            growth_cells.append(pct_cell("ltv.growth.0", 0.0, tooltip=Tooltip(formula="Baseline.")))
-            continue
-        ratios = []
-        for c in cohorts:
-            if c in pivot.index and 0 in pivot.columns and o in pivot.columns:
-                m0 = pivot.loc[c, 0]; mo = pivot.loc[c, o]
-                if m0 == m0 and mo == mo and m0:
-                    ratios.append((mo - m0) / m0)
-        g = (sum(ratios) / len(ratios)) if ratios else None
-        blended_growth[o] = g
-        growth_cells.append(pct_cell(f"ltv.growth.{o}", g, tooltip=Tooltip(
-            formula=f"Mean (Month {o} − Month 0) / Month 0 across cohorts with ≥{o} months of history.",
-            sources=[src])))
-    tree.rows.append(make_row(growth_cells, is_total=True))
+    def vrow(key, label, values, fmt="money", *, bold=False, is_total=False, indent=1, formula=""):
+        cells = [text_cell(f"ltv.{key}.lbl", label, indent=indent, bold=bold)]
+        for i, v in enumerate(values):
+            tip = Tooltip(formula=formula or label, sources=[src, nc_src])
+            if fmt == "money":
+                cells.append(money_cell(f"ltv.{key}.{i}", v, decimals=2, tooltip=tip, is_total=is_total))
+            elif fmt == "pct":
+                cells.append(pct_cell(f"ltv.{key}.{i}", v, tooltip=tip))
+            else:
+                cells.append(text_cell(f"ltv.{key}.{i}", str(v)))
+        return make_row(cells, is_total=is_total)
 
-    # Benchmark check rows (M2 / M5)
-    m2 = blended_growth.get(2)
-    m5 = blended_growth.get(5)
-    tree.rows.append(make_row([section_cell("ltv.bm", "BENCHMARKS")] + [text_cell(f"ltv.bm.{i}", "") for i in range(len(shown))], is_section=True))
-    if 2 in shown:
-        ok = (m2 is not None and m2 >= bm.get("month_2_ltv_growth_min", 0.3))
-        row = [text_cell("ltv.m2.lbl", f"Month 2 growth (target ≥ {bm.get('month_2_ltv_growth_min', 0.3)*100:.0f}%)", indent=1)]
-        row.append(pct_cell("ltv.m2.v", m2, tooltip=Tooltip(formula="Blended Month-2 cumulative value vs Month 0.", sources=[src])))
-        row += [text_cell(f"ltv.m2.pad{i}", "✓" if ok else "✗" if m2 is not None else "—") if i == 0 else text_cell(f"ltv.m2.pad{i}", "") for i in range(len(shown) - 1)]
-        tree.rows.append(make_row(row))
-    if 5 in shown:
-        ok = (m5 is not None and m5 >= bm.get("month_5_ltv_growth_min", 0.5))
-        row = [text_cell("ltv.m5.lbl", f"Month 5 growth (target ≥ {bm.get('month_5_ltv_growth_min', 0.5)*100:.0f}%)", indent=1)]
-        row.append(pct_cell("ltv.m5.v", m5, tooltip=Tooltip(formula="Blended Month-5 cumulative value vs Month 0.", sources=[src])))
-        row += [text_cell(f"ltv.m5.pad{i}", "✓" if ok else "✗" if m5 is not None else "—") if i == 0 else text_cell(f"ltv.m5.pad{i}", "") for i in range(len(shown) - 1)]
-        tree.rows.append(make_row(row))
+    def section(key, title):
+        return make_row([section_cell(f"ltv.{key}", title)] + [text_cell(f"ltv.{key}.{i}", "") for i in range(ncols)], is_section=True)
 
-    if kind == "retention":
+    # ---- §1 LTV Cohort by Customer (per customer) ----
+    ex_tax = [v / (1 + tax_rate) if v is not None else None for v in col_vals]
+    gm_dollar = [(1 - gmpo) * v if v is not None else None for v in col_vals]
+    cac_target = (first_order / amer) if amer else None
+    cac_row = [cac_target] * ncols
+    cm_time = [(gm_dollar[i] - cac_target) if (gm_dollar[i] is not None and cac_target is not None) else None for i in range(ncols)]
+
+    tree.rows.append(section("s1", "LTV COHORT BY CUSTOMER (per customer)"))
+    tree.rows.append(vrow("cv", "Customer Value (incl. tax)", col_vals, bold=True,
+                          formula="NC AOV + Σ repeat-retention × RC AOV (returning-customer AOV)." if repeat_basis == "retention" else "Cumulative customer value from the cohort export."))
+    tree.rows.append(vrow(" extax", "Customer Value (ex-tax)", ex_tax, formula="Customer Value ÷ (1 + tax rate)."))
+    tree.rows.append(vrow("gm", "Gross Margin per Order $", gm_dollar, formula=f"(1 − GMPO) × Customer Value.  GMPO = COGS% + Returns% = {gmpo*100:.1f}%."))
+    tree.rows.append(vrow("cac", "CAC Target", cac_row, formula=f"First-order value ÷ aMER ({amer:.2f})."))
+    tree.rows.append(vrow("cmt", "Contribution Margin over Time", cm_time, bold=True, is_total=True,
+                          formula="Gross Margin per Order − CAC Target."))
+
+    # ---- §2 LTV of Cohort by Revenue (scaled to the acquired cohort) ----
+    customers = (ad_spend / cac_target) if cac_target else 0.0
+    cv_wt_co = [c * customers if c is not None else None for c in col_vals]
+    cv_ex_co = [g * customers if g is not None else None for g in ex_tax]
+    cogs_co = [v * gmpo if v is not None else None for v in cv_ex_co]
+    ad_row = [ad_spend] * ncols
+    cm_co = [(cv_ex_co[i] - (cogs_co[i] or 0) - ad_spend) if cv_ex_co[i] is not None else None for i in range(ncols)]
+
+    tree.rows.append(section("s2", "LTV OF COHORT BY REVENUE"))
+    tree.rows.append(vrow("co_cv", "Customer Value (incl. tax)", cv_wt_co, formula=f"Implied customers ({customers:,.0f} = ad spend ÷ CAC) × per-customer value."))
+    tree.rows.append(vrow("co_ex", "Customer Value (ex-tax)", cv_ex_co, formula="Implied customers × per-customer ex-tax value."))
+    tree.rows.append(vrow("co_cogs", "Product Cost to Fulfil (COGS)", cogs_co, formula=f"Ex-tax cohort value × GMPO ({gmpo*100:.1f}%)."))
+    tree.rows.append(vrow("co_ad", "Ad Spend (12-month)", ad_row, formula="Acquisition spend that built the cohort (platform CSVs)."))
+    tree.rows.append(vrow("co_cm", "Contribution Margin", cm_co, bold=True, is_total=True,
+                          formula="Ex-tax cohort value − COGS − Ad Spend."))
+
+    # ---- §3 Return on Spend Metrics ----
+    inc_cv_d = [(cm_time[i] - cm_time[0]) if (cm_time[i] is not None and cm_time[0] is not None) else None for i in range(ncols)]
+    inc_cv_p = [safe_div((col_vals[i] - col_vals[0]) if col_vals[i] is not None else None, col_vals[0]) for i in range(ncols)]
+    inc_cm_d = [(cm_co[i] - cm_co[0]) if (cm_co[i] is not None and cm_co[0] is not None) else None for i in range(ncols)]
+    inc_cm_p = [safe_div((cm_co[i] - cm_co[0]) if (cm_co[i] is not None and cm_co[0] is not None) else None, cm_co[0]) for i in range(ncols)]
+
+    tree.rows.append(section("s3", "RETURN ON SPEND METRICS"))
+    tree.rows.append(vrow("inc_cvd", "$ Increase of Customer Value", inc_cv_d, formula="Contribution Margin over Time vs First Order."))
+    tree.rows.append(vrow("inc_cvp", "% Increase of Customer Value", inc_cv_p, fmt="pct", formula="(Customer Value − First Order) ÷ First Order."))
+    tree.rows.append(vrow("inc_cmd", "$ Increase of Cohort Contribution Margin", inc_cm_d, formula="Cohort Contribution Margin vs First Order."))
+    tree.rows.append(vrow("inc_cmp", "% Increase of Cohort Contribution Margin", inc_cm_p, fmt="pct", formula="(Cohort CM − First Order CM) ÷ First Order CM."))
+
+    # ---- Banner / notes ----
+    if repeat_basis == "retention":
         tree.banners.append(Banner(severity="info",
-            text=(f"Derived from the retention cohort in {src}: each customer's cumulative value = "
-                  f"(1 acquisition order + cumulative repeat-purchase rate) × blended AOV. The growth-vs-Month-0 "
-                  f"row is the cumulative repeat rate (AOV-independent) and feeds the Final Report Card M2/M5 benchmarks.")))
-        tree.notes = [
-            "Source export reports repeat-purchase retention by months since first order, not dollar value — value is reconstructed using the blended AOV.",
-            "Month-0 = the acquisition order (index 1.0 × AOV). Later months add the cohort's cumulative repeat rate.",
-            "Growth vs Month 0 (and the M2/M5 benchmarks) depends only on retention, so it holds regardless of the AOV assumption.",
-            "Recent cohorts have fewer months of history, so later-month cells are blank — the blended row only averages cohorts deep enough to have each offset.",
-        ]
+            text=(f"Derived from the retention cohort in {src}. The customer-value curve is NC AOV "
+                  f"({nc_aov:,.2f}) plus cumulative repeat-retention valued at the returning-customer AOV "
+                  f"({rc_aov:,.2f}) — repeats are valued at what returning customers actually spend, not the "
+                  f"acquisition AOV. The % increase row feeds the Final Report Card M2/M5 benchmarks.")))
     else:
         tree.banners.append(Banner(severity="info",
-            text=f"True cohort value from {src}. Each cell is cumulative customer value at that month since first purchase. The blended growth row feeds the Final Report Card M2/M5 benchmarks."))
-        tree.notes = [
-            "Cohort = the month a customer first purchased. Columns track that group's cumulative spend over their lifetime.",
-            "Recent cohorts have fewer months of history, so later-month cells are blank — the blended row only averages cohorts deep enough to have each offset.",
-        ]
-    # Stash blended growth so the Final Report Card can read it (plain floats, not np types).
-    bundle.derived.ltv_growth = {k: (float(v) if v is not None else None) for k, v in blended_growth.items()}
+            text=f"Customer-value cohort from {src}. The % increase row feeds the Final Report Card M2/M5 benchmarks."))
+    tree.notes = [
+        "§1 is per acquired customer; §2 scales it to the whole cohort using implied customers = 12-month ad spend ÷ CAC.",
+        "GMPO (cost to fulfil) = COGS% + Returns%; aMER = NC AOV ÷ CAC. Both from the 12-month figures.",
+        "Returning customers spend materially less than new ones, so repeat orders lift cumulative value only modestly — the % increase row reflects that.",
+    ]
+
+    # Stash % customer-value growth (by month offset) for the Final Report Card M2/M5 rows.
+    # Column index: 0 = First Order, 1 = Month 0, … so Month N sits at index N+1.
+    bundle.derived.ltv_growth = {o: (float(inc_cv_p[o + 1]) if inc_cv_p[o + 1] is not None else None) for o in range(0, max_off + 1)}
     return tree
 
 

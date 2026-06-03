@@ -141,8 +141,9 @@ def test_ltv_mode_a_cohort_when_present(synthetic_inputs, tmp_path):
     out = tmp_path / "out"
     cli_main([str(synthetic_inputs), str(out), "--reporting-currency", "GBP", "--run-date", "2026-05-30"])
     html = (out / "report-card-2026-05-30.html").read_text()
-    assert "Cumulative customer value by acquisition cohort" in html
-    assert "Blended % increase vs Month 0" in html
+    assert "LTV COHORT BY CUSTOMER" in html
+    assert "% Increase of Customer Value" in html
+    assert "RETURN ON SPEND METRICS" in html
     # FRC M2/M5 rows should no longer be the 'missing' placeholder.
     assert "Cohort Analysis CSV not provided" not in html
 

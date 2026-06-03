@@ -63,6 +63,13 @@ class Cell:
     section_header: bool = False
     is_total: bool = False
     is_missing: bool = False  # render as "—"
+    # Mentor-editable inputs (Final Report Card ops benchmarks): the value cell becomes an
+    # <input> in the HTML and its sibling status cell flips ✓/✗ against the target live.
+    editable: bool = False
+    target_value: float | None = None  # numeric benchmark for live comparison
+    target_max: bool = False           # True = actual should be ≤ target (ceiling); False = ≥ (floor)
+    unit: str = ""                     # display suffix on the input (e.g. "days", "/mo")
+    mentor_status_key: str | None = None  # on a status cell: the coord of the input it mirrors
 
 
 @dataclass

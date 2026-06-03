@@ -63,6 +63,19 @@ def _render_cell(c: Cell, is_first: bool = False) -> str:
     if c.bold or c.is_total: classes.append("bold")
     if c.indent: classes.append(f"indent-{c.indent}")
     cls = f' class="{" ".join(classes)}"' if classes else ""
+    # Mentor-editable input: renders an <input> that live-compares to its target.
+    if c.editable:
+        unit = f'<span class="mentor-unit">{html.escape(c.unit)}</span>' if c.unit else ""
+        tgt = "" if c.target_value is None else html.escape(str(c.target_value))
+        dir_ = "max" if c.target_max else "min"
+        inp = (f'<input class="mentor-input" type="number" step="any" inputmode="decimal" '
+               f'data-mentor-key="{html.escape(c.coord)}" data-target="{tgt}" data-dir="{dir_}" '
+               f'placeholder="enter" aria-label="mentor input" />')
+        return f'<td{cls}><span class="cell-wrap mentor-cell">{inp}{unit}</span></td>'
+    # Status cell mirroring a mentor input — JS flips its glyph as the input changes.
+    if c.mentor_status_key:
+        return (f'<td{cls}><span class="cell-wrap"><span class="mentor-status" '
+                f'data-mentor-status="{html.escape(c.mentor_status_key)}">{_fmt_value(c)}</span></span></td>')
     val = _fmt_value(c)
     dot = f'<span class="conf conf-{c.confidence}"></span>' if c.confidence not in ("derived",) and not c.section_header else ""
     if c.tooltip and not c.section_header and c.value is not None:

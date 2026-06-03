@@ -374,3 +374,15 @@ td:first-child .cell-wrap { justify-content: flex-start; }
   section.tab-panel { display: block !important; page-break-after: always; }
   header.rc-head { background: var(--dm-purple) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* Mentor-editable benchmark inputs (Final Report Card ops section) */
+.mentor-cell { display: inline-flex; align-items: center; gap: 4px; }
+.mentor-input {
+  width: 72px; padding: 3px 6px; font: inherit; font-size: 0.85rem;
+  border: 1px solid var(--dm-lavender-soft); border-radius: 6px;
+  background: #fff; color: var(--dm-purple); text-align: right;
+}
+.mentor-input:focus { outline: none; border-color: var(--dm-lavender); box-shadow: 0 0 0 2px rgba(151,125,255,0.25); }
+.mentor-unit { font-size: 0.78rem; color: #6c707a; }
+.mentor-status.pass { color: #1a8c4a; font-weight: 700; }
+.mentor-status.fail { color: #d23f3f; font-weight: 700; }

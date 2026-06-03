@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from ..models import Banner, RenderTree, Tooltip
+from ..models import Banner, Cell, RenderTree, Tooltip
 from .helpers import make_row, money_cell, pct_cell, safe_div, section_cell, text_cell
 
 
@@ -352,38 +352,26 @@ def compute(bundle) -> RenderTree:
                   f"Negative inventory balance ({inv_balance:,.0f}) — fix stock-take/COGS before reading days" if inv_negative else "Discuss with operations"),
     ]))
 
-    tree.rows.append(make_row([
-        text_cell("frc.o.leadtime.lbl", "Product lead times (PO → warehouse)", indent=1),
-        text_cell("frc.o.leadtime.v", "—"),
-        text_cell("frc.o.leadtime.t", "< 60 days"),
-        text_cell("frc.o.leadtime.s", "—"),
-        text_cell("frc.o.leadtime.b", "—"),
-        text_cell("frc.o.leadtime.f", "Mentor-entered after build"),
-    ]))
-    tree.rows.append(make_row([
-        text_cell("frc.o.adlaunch.lbl", "Monthly # of ads launched", indent=1),
-        text_cell("frc.o.adlaunch.v", "—"),
-        text_cell("frc.o.adlaunch.t", "> 20/mo"),
-        text_cell("frc.o.adlaunch.s", "—"),
-        text_cell("frc.o.adlaunch.b", "—"),
-        text_cell("frc.o.adlaunch.f", "Mentor-entered after build"),
-    ]))
-    tree.rows.append(make_row([
-        text_cell("frc.o.promos.lbl", "Marketing / Promo events per year", indent=1),
-        text_cell("frc.o.promos.v", "—"),
-        text_cell("frc.o.promos.t", "12 / year"),
-        text_cell("frc.o.promos.s", "—"),
-        text_cell("frc.o.promos.b", "—"),
-        text_cell("frc.o.promos.f", "Mentor-entered after build"),
-    ]))
-    tree.rows.append(make_row([
-        text_cell("frc.o.emails.lbl", "Emails sent per week", indent=1),
-        text_cell("frc.o.emails.v", "—"),
-        text_cell("frc.o.emails.t", "≥ 3 / week"),
-        text_cell("frc.o.emails.s", "—"),
-        text_cell("frc.o.emails.b", "—"),
-        text_cell("frc.o.emails.f", "Mentor-entered after build"),
-    ]))
+    def mentor_row(key, label, target_label, target_value, *, target_max, unit, hint):
+        vcoord = f"frc.o.{key}.v"
+        return make_row([
+            text_cell(f"frc.o.{key}.lbl", label, indent=1),
+            Cell(coord=vcoord, value=None, fmt="text", confidence="derived",
+                 editable=True, target_value=target_value, target_max=target_max, unit=unit),
+            text_cell(f"frc.o.{key}.t", target_label),
+            Cell(coord=f"frc.o.{key}.s", value="—", fmt="text", confidence="derived", mentor_status_key=vcoord),
+            text_cell(f"frc.o.{key}.b", "—"),
+            text_cell(f"frc.o.{key}.f", hint),
+        ])
+
+    tree.rows.append(mentor_row("leadtime", "Product lead times (PO → warehouse)", "< 60 days", 60,
+                                target_max=True, unit="days", hint="Enter your typical PO→warehouse lead time"))
+    tree.rows.append(mentor_row("adlaunch", "Monthly # of ads launched", "> 20 / mo", 20,
+                                target_max=False, unit="/mo", hint="Enter creatives launched per month"))
+    tree.rows.append(mentor_row("promos", "Marketing / Promo events per year", "12 / year", 12,
+                                target_max=False, unit="/yr", hint="Enter promo events per year"))
+    tree.rows.append(mentor_row("emails", "Emails sent per week", "≥ 3 / week", 3,
+                                target_max=False, unit="/wk", hint="Enter emails sent per week"))
 
     # Banners
     tree.banners.append(Banner(severity="info",
@@ -402,7 +390,7 @@ def compute(bundle) -> RenderTree:
     tree.notes = [
         "Bleed = dollar amount above/below target (positive = costing you money).",
         "Fix = the percentage-point change required to hit target.",
-        "Ops benchmarks below the line are placeholders — mentor edits after the call.",
+        "Ops benchmarks are editable: type a value into the box and the status flips ✓/✗ against the target live (saved in your browser). Entries are HTML-only — the xlsx leaves them blank to fill in.",
     ]
 
     return tree
