@@ -390,3 +390,25 @@ td:first-child .cell-wrap { justify-content: flex-start; }
 /* Benchmark pass/fail glyphs (✓ green / ✗ red) — standard across all tabs */
 .status-pass { color: #1a8c4a; font-weight: 700; }
 .status-fail { color: #d23f3f; font-weight: 700; }
+
+/* Expand/collapse: section groups + vendor/SKU sub-rows */
+tr.hidden-by-section, tr.sub-row.hidden-by-parent { display: none; }
+tr.expandable, tr.section { cursor: pointer; }
+tr.expandable td:first-child .cell-wrap::before { content: "\25B8\00A0"; color: var(--dm-lavender); }
+tr.expandable.open td:first-child .cell-wrap::before { content: "\25BE\00A0"; }
+tr.section td:first-child .cell-wrap::after { content: "\00A0\25BE"; opacity: .65; font-size: .85em; }
+tr.section.collapsed td:first-child .cell-wrap::after { content: "\00A0\25B8"; }
+tr.sub-row td { background: #faf8f4; }
+
+/* Legal disclaimer strip under the header */
+.rc-disclaimer {
+  background: var(--dm-purple); color: rgba(255,255,255,0.75);
+  font-size: 0.72rem; padding: 4px 28px 10px; line-height: 1.4;
+}
+@media print { .rc-disclaimer { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+
+/* Daily Mentor logo (replaces the text pill in the header) */
+.dm-logo { height: 40px; width: auto; display: block; border-radius: 6px; }
+
+/* Audit tab sub-heading for relocated tab notices */
+.audit-subhead { margin: 22px 0 8px; color: var(--dm-purple); }

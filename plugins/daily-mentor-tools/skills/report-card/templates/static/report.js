@@ -38,6 +38,30 @@
       });
     });
   }
+  // Expand/collapse: section headers fold their group; expandable account rows
+  // toggle their vendor/SKU sub-rows (collapsed by default).
+  function initCollapse(){
+    document.querySelectorAll('tr.expandable').forEach(tr => {
+      tr.addEventListener('click', () => {
+        const key = tr.dataset.expandKey;
+        const open = tr.classList.toggle('open');
+        tr.closest('table').querySelectorAll('tr[data-sub-of]').forEach(s => {
+          if (s.dataset.subOf === key) s.classList.toggle('hidden-by-parent', !open);
+        });
+      });
+    });
+    document.querySelectorAll('tr.section').forEach(sec => {
+      sec.addEventListener('click', () => {
+        const collapsed = sec.classList.toggle('collapsed');
+        let n = sec.nextElementSibling;
+        while (n && !n.classList.contains('section')){
+          n.classList.toggle('hidden-by-section', collapsed);
+          n = n.nextElementSibling;
+        }
+      });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function(){
     document.querySelectorAll('nav.rc-tabs button').forEach(b => {
       b.addEventListener('click', () => activate(b.dataset.tab));
@@ -45,21 +69,7 @@
     // First tab default
     const first = document.querySelector('nav.rc-tabs button');
     if (first) activate(first.dataset.tab);
-    // Month pills (Daily Tracker)
-    document.querySelectorAll('.month-pills').forEach(group => {
-      const target = group.dataset.target;
-      group.querySelectorAll('button').forEach(b => {
-        b.addEventListener('click', () => {
-          group.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
-          document.querySelectorAll('[data-tracker-month]').forEach(t => {
-            t.style.display = t.dataset.trackerMonth === b.dataset.month ? '' : 'none';
-          });
-        });
-      });
-      // Activate first
-      const first = group.querySelector('button');
-      if (first) first.click();
-    });
     initMentor();
+    initCollapse();
   });
 })();

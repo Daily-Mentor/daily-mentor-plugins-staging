@@ -18,9 +18,8 @@ _DEPS_IMPORT_ERROR: ImportError | None = None
 try:
     from .audit import add_format_audit, add_xlsx_audit_result, run_ingest_audit
     from .compute import (
-        brand_profit_sim, change_log, daily_tracker, design_legend,
         final_report_card, financial_position, homepage, ltv,
-        monthly_pl, nccm, notes_reconciliation,
+        monthly_pl, nccm,
     )
     from .ingest import ingest
     from .render_html import render as render_html
@@ -97,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
     print("[transform] normalising frames")
     bundle = transform(bundle)
 
-    print("[compute] building 11 tab trees")
+    print("[compute] building 6 tab trees")
     trees = [
         homepage.compute(bundle),
         monthly_pl.compute(bundle),
@@ -105,11 +104,6 @@ def main(argv: list[str] | None = None) -> int:
         nccm.compute(bundle),
         ltv.compute(bundle),
         final_report_card.compute(bundle),
-        brand_profit_sim.compute(bundle),
-        daily_tracker.compute(bundle),
-        notes_reconciliation.compute(bundle),
-        change_log.compute(bundle, output_dir=output_dir),
-        design_legend.compute(bundle),
     ]
 
     print("[audit] running ingest assertions")
@@ -135,14 +129,13 @@ def main(argv: list[str] | None = None) -> int:
     else:
         add_xlsx_audit_result(audit_report, "HALT",
             "xlsx zip integrity check failed.", check_id="A8")
-    expected_sheets = 11 + 13 - 1 + 1  # 10 tabs + 13 daily monthlies + audit + 1 daily tab replaced by 13 = computed
-    # Simpler: assert >= 11 sheets
-    if xlsx_info["sheet_count"] >= 11:
+    # 6 report tabs + the audit sheet
+    if xlsx_info["sheet_count"] >= 7:
         add_xlsx_audit_result(audit_report, "PASS",
-            f"Sheet count = {xlsx_info['sheet_count']} (expected ≥ 11).", check_id="A9")
+            f"Sheet count = {xlsx_info['sheet_count']} (expected ≥ 7).", check_id="A9")
     else:
         add_xlsx_audit_result(audit_report, "HALT",
-            f"Sheet count = {xlsx_info['sheet_count']} (expected ≥ 11).", check_id="A9")
+            f"Sheet count = {xlsx_info['sheet_count']} (expected ≥ 7).", check_id="A9")
 
     # Write audit JSON for traceability
     import json

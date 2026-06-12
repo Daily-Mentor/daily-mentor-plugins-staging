@@ -19,6 +19,7 @@ from .helpers import make_row, money_cell, pct_cell, safe_div, section_cell, tex
 
 
 _DEFAULTS_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "defaults.json"
+_BENCHMARKS_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "benchmarks.json"
 
 
 def _quarter_sort_key(label: str) -> tuple[int, int]:
@@ -56,6 +57,8 @@ def compute(bundle) -> RenderTree:
     nc_rc = bundle.nc_rc
     with _DEFAULTS_PATH.open() as f:
         defaults = json.load(f)["nccm"]
+    with _BENCHMARKS_PATH.open() as f:
+        cm_min = json.load(f).get("growth", {}).get("contribution_margin_min", 0.35)
 
     tree = RenderTree(tab_id="nccm", title="NCCM Calculator",
                       subtitle="New Customer Contribution Margin — quarter over quarter. Run by region if selling in multiple.")
@@ -113,12 +116,18 @@ def compute(bundle) -> RenderTree:
             ad_q = float(d.daily_ad_spend.loc[mask, "amount"].sum())
         cac = safe_div(ad_q, nc_orders) if nc_orders else None
         fcm = (gp_po - cac) if (gp_po is not None and cac is not None) else None
+        # Breakeven ROAS: the ROAS at which first-order CM = 0 (spend per order = GP per order).
+        be_roas = safe_div(aov, gp_po) if (aov and gp_po and gp_po > 0) else None
+        # Target ROAS: the ROAS needed to bank the CM benchmark (ad/order = GP − cm_min × AOV).
+        tgt_denom = (gp_po - cm_min * aov) if (aov and gp_po is not None) else None
+        tgt_roas = (aov / tgt_denom) if (tgt_denom and tgt_denom > 0) else None
 
         return {
             "orders": nc_orders, "aov": aov, "tax_po": safe_div(nc_tax, nc_orders),
             "cogs_po": cogs_po, "pp": pp_dollar, "sm": sm_dollar, "txn": txn_fee,
             "pack": packaging, "ful": fulfillment, "op_cost": op_cost,
             "gp_po": gp_po, "ad_q": ad_q, "cac": cac, "fcm": fcm,
+            "be_roas": be_roas, "tgt_roas": tgt_roas,
             "nc_perf": nc_perf, "nc_cogs": nc_cogs,
         }
 
@@ -142,6 +151,8 @@ def compute(bundle) -> RenderTree:
                 cells.append(money_cell(f"nccm.{key}.{i}", v, tooltip=tip, decimals=2, is_total=is_total))
             elif fmt == "pct":
                 cells.append(pct_cell(f"nccm.{key}.{i}", v, tooltip=tip))
+            elif fmt == "ratio":
+                cells.append(text_cell(f"nccm.{key}.{i}", f"{v:.2f}x" if v is not None else "—"))
             else:
                 cells.append(text_cell(f"nccm.{key}.{i}", f"{int(v):,}" if v is not None else "—"))
         cells.append(text_cell(f"nccm.{key}.note", note))
@@ -186,6 +197,12 @@ def compute(bundle) -> RenderTree:
         "Total ad-platform spend in the calendar quarter (×FX).", indent=2))
     tree.rows.append(metric_row("cac", "CAC", lambda v: v["cac"], "money",
         "Quarter ad spend / NC orders for the same quarter.", tip_formula="Quarter Ad Spend / NC Orders"))
+    tree.rows.append(metric_row("beroas", "Breakeven ROAS", lambda v: v["be_roas"], "ratio",
+        "AOV ÷ Gross Profit per Order — the ROAS at which the first order breaks even. Spend below this loses money on order one.",
+        tip_formula="AOV ÷ Gross Profit per Order"))
+    tree.rows.append(metric_row("tgtroas", f"Target ROAS (≥ {cm_min*100:.0f}% CM)", lambda v: v["tgt_roas"], "ratio",
+        f"AOV ÷ (GP per order − {cm_min*100:.0f}% × AOV) — the ROAS needed to bank the {cm_min*100:.0f}% contribution-margin target. '—' = unreachable at current per-order costs.",
+        tip_formula="AOV ÷ (GP per order − CM target × AOV)"))
     tree.rows.append(metric_row("fcm", "First-Order Contribution Margin", lambda v: v["fcm"], "money",
         "Gross Profit per Order − CAC. Positive = acquisition profitable on order one.",
         bold=True, is_total=True, tip_formula="Gross Profit per Order − CAC"))

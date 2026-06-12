@@ -193,7 +193,7 @@ def test_gate3_produces_html_and_xlsx(synthetic_inputs, tmp_path):
 
     # xlsx opens, has the expected tab set, and carries no leftover cell comments.
     wb = load_workbook(xlsx_path)
-    assert len(wb.sheetnames) >= 11
+    assert len(wb.sheetnames) >= 7
     assert "Monthly P&L" in wb.sheetnames
     assert "Audit Report" in wb.sheetnames
     comments = sum(1 for sn in wb.sheetnames for row in wb[sn].iter_rows() for c in row if c.comment)

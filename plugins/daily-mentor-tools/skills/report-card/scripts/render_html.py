@@ -13,6 +13,15 @@ _CSS = (_PLUGIN_ROOT / "templates" / "static" / "report.css").read_text()
 _JS = (_PLUGIN_ROOT / "templates" / "static" / "report.js").read_text()
 
 
+def _logo_data_uri() -> str | None:
+    """Daily Mentor logo, base64-embedded so the HTML stays a single self-contained file."""
+    import base64
+    path = _PLUGIN_ROOT / "templates" / "assets" / "dm-logo.avif"
+    if not path.exists():
+        return None
+    return "data:image/avif;base64," + base64.b64encode(path.read_bytes()).decode("ascii")
+
+
 def _colorize_status(s: str) -> str:
     """Green ✓ / red ✗ wherever a status glyph appears (benchmark pass/fail)."""
     return (s.replace("✓", '<span class="status-pass">✓</span>')
@@ -96,15 +105,19 @@ def _render_cell(c: Cell, is_first: bool = False) -> str:
 
 def _render_row(row: Row) -> str:
     classes: list[str] = []
+    attrs = ""
     if row.is_section: classes.append("section")
     if row.is_total: classes.append("total")
+    if row.expandable_key:
+        classes.append("expandable")
+        attrs += f' data-expand-key="{html.escape(row.expandable_key)}"'
+    if row.sub_of:
+        # Child detail row — collapsed until its parent is toggled open.
+        classes.extend(["sub-row", "hidden-by-parent"])
+        attrs += f' data-sub-of="{html.escape(row.sub_of)}"'
     cls = f' class="{" ".join(classes)}"' if classes else ""
     cells_html = "".join(_render_cell(c, i == 0) for i, c in enumerate(row.cells))
-    return f'<tr{cls}>{cells_html}</tr>'
-
-
-def _render_banner(b: Banner) -> str:
-    return f'<div class="banner {b.severity}">{html.escape(b.text)}</div>'
+    return f'<tr{cls}{attrs}>{cells_html}</tr>'
 
 
 def _render_table(tree: RenderTree, rows: list[Row] | None = None) -> str:
@@ -112,26 +125,6 @@ def _render_table(tree: RenderTree, rows: list[Row] | None = None) -> str:
     head_cells = "".join(f'<th>{html.escape(c)}</th>' for c in tree.columns)
     body = "".join(_render_row(r) for r in rows)
     return f'<table class="rc-table"><thead><tr>{head_cells}</tr></thead><tbody>{body}</tbody></table>'
-
-
-def _render_tracker(tree: RenderTree) -> str:
-    """Daily Tracker special: month pills + per-month tables."""
-    if not tree.sub_views:
-        return _render_table(tree)
-    pills = '<div class="month-pills" data-target="tracker">'
-    for m in tree.sub_views.keys():
-        pills += f'<button data-month="{html.escape(m)}">{html.escape(m)}</button>'
-    pills += "</div>"
-    tables = []
-    for m, rows in tree.sub_views.items():
-        head_cells = "".join(f'<th>{html.escape(c)}</th>' for c in tree.columns)
-        body = "".join(_render_row(r) for r in rows)
-        tables.append(
-            f'<div data-tracker-month="{html.escape(m)}" style="display:none">'
-            f'<table class="rc-table"><thead><tr>{head_cells}</tr></thead><tbody>{body}</tbody></table>'
-            f'</div>'
-        )
-    return pills + "".join(tables)
 
 
 def _render_audit_tab(report: AuditReport) -> str:
@@ -151,6 +144,9 @@ def _render_audit_tab(report: AuditReport) -> str:
 def render(trees: list[RenderTree], audit_report: AuditReport, *, client: str, run_date) -> str:
     nav_buttons: list[str] = []
     panels: list[str] = []
+    # Banners no longer sit above each tab body — they're collected and shown
+    # on the Audit Report tab as per-tab notices.
+    tab_notices: list[tuple[str, Banner]] = []
     for tree in trees:
         nav_buttons.append(
             f'<button data-tab="{html.escape(tree.tab_id)}">{html.escape(tree.title)}</button>'
@@ -161,11 +157,8 @@ def render(trees: list[RenderTree], audit_report: AuditReport, *, client: str, r
             panel_inner.append(f'<p class="tab-subtitle">{html.escape(tree.subtitle)}</p>')
         else:
             panel_inner.append(f'<h2 class="tab-title">{html.escape(tree.title)}</h2>')
-        for b in tree.banners:
-            panel_inner.append(_render_banner(b))
-        if tree.tab_id == "daily_tracker":
-            panel_inner.append(_render_tracker(tree))
-        elif tree.raw_html:
+        tab_notices.extend((tree.title, b) for b in tree.banners)
+        if tree.raw_html:
             panel_inner.append(tree.raw_html)
         else:
             panel_inner.append(_render_table(tree))
@@ -176,17 +169,27 @@ def render(trees: list[RenderTree], audit_report: AuditReport, *, client: str, r
             f'<section class="tab-panel" data-tab="{html.escape(tree.tab_id)}">{"".join(panel_inner)}</section>'
         )
 
-    # Append Audit Report tab
+    # Append Audit Report tab (audit checks + the per-tab notices moved off the page bodies)
+    notices_html = ""
+    if tab_notices:
+        notices_html = '<h3 class="audit-subhead">Tab Notices</h3>' + "".join(
+            f'<div class="banner {b.severity}"><strong>{html.escape(tab)}:</strong> {html.escape(b.text)}</div>'
+            for tab, b in tab_notices
+        )
     nav_buttons.append('<button data-tab="audit_report">Audit Report</button>')
     panels.append(
         f'<section class="tab-panel" data-tab="audit_report">'
         f'<h2 class="tab-title">Audit Report</h2>'
         f'<p class="tab-subtitle">Run {audit_report.run_id} at {audit_report.timestamp:%Y-%m-%d %H:%M}.</p>'
         f'{_render_audit_tab(audit_report)}'
+        f'{notices_html}'
         f'</section>'
     )
 
     title = f"Report Card — {client} — {run_date}"
+    logo = _logo_data_uri()
+    brand = (f'<img class="dm-logo" src="{logo}" alt="Daily Mentor" />' if logo
+             else '<span class="dm-pill alt">Daily Mentor</span>')
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -196,13 +199,14 @@ def render(trees: list[RenderTree], audit_report: AuditReport, *, client: str, r
 </head>
 <body>
 <header class="rc-head">
-  <span class="dm-pill alt">Daily Mentor</span>
+  {brand}
   <div>
     <h1>{html.escape(client)}</h1>
     <span class="rc-sub">Report Card · {html.escape(str(run_date))}</span>
   </div>
   <span class="rc-meta">Generated {audit_report.timestamp:%Y-%m-%d %H:%M}</span>
 </header>
+<div class="rc-disclaimer">Disclaimer: This Report Card is a directional tool only, it is not a legal document, does not constitute tax advice or confirm liabilities, and may contain errors; always verify with a qualified tax professional :)</div>
 <nav class="rc-tabs">{"".join(nav_buttons)}</nav>
 <main class="rc-body">{"".join(panels)}</main>
 <script>{_JS}</script>

@@ -3,7 +3,7 @@
 Sections rendered in this order:
 
     REVENUE                  ← Shopify ×FX (G39)
-    COST OF GOODS SOLD       ← Shopify per-sale product cost ×FX
+    COST OF DELIVERY (COD)   ← all-in cost to deliver: product cost + freight/packaging/fees
     GROSS PROFIT             ← Net Sales − Product COGS
     OTHER INCOME             ← Xero rows tagged is_other_income
     MARKETING                ← Xero (or ad-platform CSV fallback)
@@ -184,9 +184,9 @@ def compute(bundle) -> RenderTree:
 
     tree.rows.append(make_row([text_cell("pl.spacer1", "")] + [text_cell(f"pl.spacer1.{i}", "") for i in range(n_cols + 1)]))
 
-    # ---- COST OF GOODS SOLD (componentised; contribution-margin shape) ----
+    # ---- COST OF DELIVERY (componentised; contribution-margin shape) ----
     tree.rows.append(make_row(
-        [section_cell("pl.cogs.h", "COST OF GOODS SOLD")] + [text_cell(f"pl.cogs.h.{i}", "") for i in range(n_cols + 1)],
+        [section_cell("pl.cogs.h", "COST OF DELIVERY (COD)")] + [text_cell(f"pl.cogs.h.{i}", "") for i in range(n_cols + 1)],
         is_section=True,
     ))
 
@@ -252,7 +252,7 @@ def compute(bundle) -> RenderTree:
                     sub_cells.append(money_cell(f"pl.cogs_xero.{sku}.tot", sku_12mo or None, tooltip=Tooltip(
                         formula="12-month sum.", sources=[atxn_src], gotcha_refs=["G35"],
                     ), is_total=True))
-                    sku_sub_rows.append(make_row(sub_cells))
+                    sku_sub_rows.append(make_row(sub_cells, sub_of="vendor::cogs_product_xero"))
         expandable_key = "vendor::cogs_product_xero" if sku_sub_rows else None
         tree.rows.append(make_row(product_cogs_row, expandable_key=expandable_key))
         tree.rows.extend(sku_sub_rows)
@@ -338,14 +338,14 @@ def compute(bundle) -> RenderTree:
                 sub_cells.append(money_cell(f"pl.cogs.{bucket_id}.{contact}.tot", contact_12mo or None, tooltip=Tooltip(
                     formula="12-month sum.", sources=[atxn_src], gotcha_refs=["G35"],
                 ), is_total=True))
-                tree.rows.append(make_row(sub_cells))
+                tree.rows.append(make_row(sub_cells, sub_of=expandable_cogs))
 
     # 3. Returns Shipping & Processing — derived line (per-return cost × return count).
     # Skip if we can't derive (would mostly be 0 for now).
 
-    # 4. TOTAL COST OF GOODS SOLD
+    # 4. TOTAL COST OF DELIVERY
     total_cogs_monthly: dict[date, float] = {}
-    tot_cogs_cells = [text_cell("pl.totcogs.lbl", "TOTAL COST OF GOODS SOLD", bold=True)]
+    tot_cogs_cells = [text_cell("pl.totcogs.lbl", "TOTAL COST OF DELIVERY", bold=True)]
     tot_cogs_12mo = 0.0
     for i, m in enumerate(months):
         components = [cm.get(m, 0) for cm in cogs_component_monthly.values()]
@@ -612,7 +612,7 @@ def compute(bundle) -> RenderTree:
                     sub_cells.append(money_cell(f"pl.{account_lower}.{contact}.tot", contact_12mo or None, tooltip=Tooltip(
                         formula="12-month sum.", sources=[atxn_src], gotcha_refs=["G35"],
                     ), is_total=True))
-                    tree.rows.append(make_row(sub_cells))
+                    tree.rows.append(make_row(sub_cells, sub_of=expandable))
 
         # TOTAL <section>
         tot_cells = [text_cell(f"pl.tot.{section}.lbl", f"TOTAL {section.upper()}", bold=True)]
@@ -700,9 +700,26 @@ def compute(bundle) -> RenderTree:
         tree.banners.append(Banner(severity="info",
             text=f"Account Transactions export is bank-account-mode ('{only_account}' only). Vendor sub-rows aggregate by contact at the bank level; cannot attribute to specific expense accounts. Request an expense-grouped Atxn export for richer breakdown."))
 
+    # ---- % of Net Sales column (each line's 12-mo total ÷ 12-mo Net Sales) ----
+    tree.columns.append("% of Net Sales")
+    for row in tree.rows:
+        if not row.cells:
+            continue
+        last = row.cells[-1]
+        base = last.coord or (row.cells[0].coord or "row")
+        if (not row.is_section and rev_total_12mo > 0
+                and last.fmt in ("currency", "currency_dec") and isinstance(last.value, (int, float))):
+            row.cells.append(pct_cell(f"{base}.pctnet", float(last.value) / rev_total_12mo, tooltip=Tooltip(
+                formula="This line's 12-month total ÷ 12-month Net Sales.",
+                sources=[shopify_src],
+            )))
+        else:
+            row.cells.append(text_cell(f"{base}.pctnet", ""))
+
     # ---- Notes section at bottom ----
     tree.notes = [
-        "Click +/– next to an account name to expand vendor detail (where Account Transactions is grouped by expense account).",
+        "Click a section header to collapse/expand the group; click ▸ on an account row to expand vendor detail (where Account Transactions is grouped by expense account).",
+        "% of Net Sales = the line's 12-month total as a share of 12-month Net Sales.",
         "Vendor net = Credit − Debit per (account, contact, month). G35.",
         "Account totals are SUM formulas — adjust an underlying number and the rollup follows.",
         "Months with no Xero posting render as '—' rather than 0 — silent zeros would be misleading (G39).",

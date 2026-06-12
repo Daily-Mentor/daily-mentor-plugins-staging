@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Daily Mentor plugin marketplace for Claude Code.",
-    "version": "0.4.5"
+    "version": "0.5.0"
   },
   "plugins": [
     {
       "name": "daily-mentor-tools",
       "source": "./plugins/daily-mentor-tools",
-      "description": "Daily Mentor toolkit — a suite of e-commerce mentorship skills. Includes the Report Card diagnostic (12-tab HTML + xlsx; brand- and currency-neutral; quarter-over-quarter NCCM and cohort LTV).",
-      "version": "0.4.5",
+      "description": "Daily Mentor toolkit — a suite of e-commerce mentorship skills. Includes the Report Card diagnostic (7-tab HTML + xlsx; brand- and currency-neutral; quarter-over-quarter NCCM and cohort LTV).",
+      "version": "0.5.0",
       "category": "analytics",
       "keywords": [
         "ecommerce",

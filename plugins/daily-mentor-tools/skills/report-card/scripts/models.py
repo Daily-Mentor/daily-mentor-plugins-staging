@@ -78,6 +78,7 @@ class Row:
     is_section: bool = False
     is_total: bool = False
     expandable_key: str | None = None  # for HTML accordion / vendor sub-rows
+    sub_of: str | None = None          # this row is a child of the row with that expandable_key (collapsed by default)
 
 
 @dataclass

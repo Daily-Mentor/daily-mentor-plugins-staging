@@ -1,6 +1,5 @@
 """Render the same RenderTrees as an xlsx workbook.
 
-- Daily Tracker → 13 monthly sheets (per spec) using sub_views.
 - Every calculated cell gets an openpyxl.comments.Comment carrying tooltip text.
 - Number formats applied immediately after value (G1).
 - No formula merging on top of conditional formatting (G3).
@@ -83,14 +82,8 @@ def _write_tree(wb: Workbook, tree: RenderTree, *, sheet_name: str | None = None
     ws.cell(1, 1, tree.title).font = Font(bold=True, size=14)
     if tree.subtitle:
         ws.cell(2, 1, tree.subtitle).font = Font(italic=True, color="6C707A")
-    # Column headers
+    # Column headers (tab banners live on the Audit Report sheet, not the page body)
     header_row = 4
-    if tree.banners:
-        for i, b in enumerate(tree.banners):
-            ws.cell(header_row + i, 1, f"[{b.severity.upper()}] {b.text}").font = Font(
-                color="B91C1C" if b.severity == "error" else "D97706" if b.severity == "warning" else "2563EB")
-            ws.merge_cells(start_row=header_row + i, start_column=1, end_row=header_row + i, end_column=max(len(tree.columns), 2))
-        header_row += len(tree.banners) + 1
     for c, col_name in enumerate(tree.columns, start=1):
         cell = ws.cell(header_row, c, col_name)
         cell.font = _HEADER_FONT
@@ -116,7 +109,7 @@ def _write_tree(wb: Workbook, tree: RenderTree, *, sheet_name: str | None = None
         ws.column_dimensions[get_column_letter(c)].width = 14
 
 
-def _write_audit_tab(wb: Workbook, report: AuditReport):
+def _write_audit_tab(wb: Workbook, report: AuditReport, trees: list[RenderTree] | None = None):
     ws = wb.create_sheet(title="Audit Report")
     ws.cell(1, 1, "Audit Report").font = Font(bold=True, size=14)
     ws.cell(2, 1, f"Run {report.run_id} at {report.timestamp:%Y-%m-%d %H:%M}").font = Font(italic=True)
@@ -125,11 +118,25 @@ def _write_audit_tab(wb: Workbook, report: AuditReport):
         cell = ws.cell(4, c, h)
         cell.font = _HEADER_FONT
         cell.fill = _HEADER_FILL
-    for i, r in enumerate(report.results, start=5):
-        ws.cell(i, 1, r.check_id).font = Font(bold=True)
-        ws.cell(i, 2, r.name)
-        ws.cell(i, 3, r.status)
-        ws.cell(i, 4, r.message)
+    r_idx = 5
+    for r in report.results:
+        ws.cell(r_idx, 1, r.check_id).font = Font(bold=True)
+        ws.cell(r_idx, 2, r.name)
+        ws.cell(r_idx, 3, r.status)
+        ws.cell(r_idx, 4, r.message)
+        r_idx += 1
+    # Per-tab notices (banners moved off the page bodies)
+    notices = [(t.title, b) for t in (trees or []) for b in t.banners]
+    if notices:
+        r_idx += 1
+        ws.cell(r_idx, 1, "Tab Notices").font = Font(bold=True, size=12)
+        r_idx += 1
+        for tab, b in notices:
+            ws.cell(r_idx, 1, b.severity.upper()).font = Font(
+                color="B91C1C" if b.severity == "error" else "D97706" if b.severity == "warning" else "2563EB")
+            ws.cell(r_idx, 2, tab)
+            ws.cell(r_idx, 4, b.text)
+            r_idx += 1
     ws.column_dimensions["A"].width = 8
     ws.column_dimensions["B"].width = 36
     ws.column_dimensions["C"].width = 10
@@ -144,16 +151,9 @@ def render(trees: list[RenderTree], audit_report: AuditReport, output_path: Path
     wb.remove(default)
 
     for tree in trees:
-        if tree.tab_id == "daily_tracker" and tree.sub_views:
-            # One sheet per month, oldest first
-            for month_label, rows in tree.sub_views.items():
-                # Excel sheet names: max 31 chars, no special chars
-                safe = f"Daily - {month_label}"[:31]
-                _write_tree(wb, tree, sheet_name=safe, rows_override=rows)
-        else:
-            _write_tree(wb, tree)
+        _write_tree(wb, tree)
 
-    _write_audit_tab(wb, audit_report)
+    _write_audit_tab(wb, audit_report, trees)
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)

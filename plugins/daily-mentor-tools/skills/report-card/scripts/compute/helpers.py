@@ -76,5 +76,6 @@ def int_cell(coord: str, value: int | float | None, *, tooltip: Tooltip | None =
 
 
 def make_row(cells: Iterable[Cell], *, is_total: bool = False, is_section: bool = False,
-             expandable_key: str | None = None) -> Row:
-    return Row(cells=list(cells), is_total=is_total, is_section=is_section, expandable_key=expandable_key)
+             expandable_key: str | None = None, sub_of: str | None = None) -> Row:
+    return Row(cells=list(cells), is_total=is_total, is_section=is_section,
+               expandable_key=expandable_key, sub_of=sub_of)
