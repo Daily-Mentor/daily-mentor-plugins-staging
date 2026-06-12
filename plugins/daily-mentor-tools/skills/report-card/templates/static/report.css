@@ -412,3 +412,9 @@ tr.sub-row td { background: #faf8f4; }
 
 /* Audit tab sub-heading for relocated tab notices */
 .audit-subhead { margin: 22px 0 8px; color: var(--dm-purple); }
+
+/* Final Report Card: pass/fail row tinting (25% opacity), hover still visible */
+tr.row-pass { background: rgba(26, 140, 74, 0.25); }
+tr.row-fail { background: rgba(210, 63, 63, 0.25); }
+table.rc-table tbody tr.row-pass:hover { background: rgba(26, 140, 74, 0.38); }
+table.rc-table tbody tr.row-fail:hover { background: rgba(210, 63, 63, 0.38); }

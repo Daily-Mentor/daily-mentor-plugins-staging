@@ -9,6 +9,17 @@
     });
   }
 
+  // Final Report Card: tint a row green/red from its pass/fail status glyph.
+  function toneRow(tr){
+    if (!tr || !tr.closest('section[data-tab="final_report_card"]')) return;
+    tr.classList.remove('row-pass','row-fail');
+    if (tr.querySelector('.status-fail, .mentor-status.fail')) tr.classList.add('row-fail');
+    else if (tr.querySelector('.status-pass, .mentor-status.pass')) tr.classList.add('row-pass');
+  }
+  function initRowTones(){
+    document.querySelectorAll('section[data-tab="final_report_card"] table.rc-table tbody tr').forEach(toneRow);
+  }
+
   // Mentor-entered benchmark inputs: compare the typed value to its target live,
   // flip the sibling status cell ✓/✗, and persist to localStorage.
   function evalMentor(input){
@@ -18,13 +29,13 @@
     const target = parseFloat(input.dataset.target);
     if (status){ status.classList.remove('pass','fail'); }
     if (raw === '' || isNaN(parseFloat(raw))){
-      if (status){ status.textContent = '—'; }
+      if (status){ status.textContent = '—'; toneRow(status.closest('tr')); }
       return;
     }
     const val = parseFloat(raw);
     if (!isNaN(target)){
       const ok = input.dataset.dir === 'max' ? (val <= target) : (val >= target);
-      if (status){ status.textContent = ok ? '✓' : '✗'; status.classList.add(ok ? 'pass' : 'fail'); }
+      if (status){ status.textContent = ok ? '✓' : '✗'; status.classList.add(ok ? 'pass' : 'fail'); toneRow(status.closest('tr')); }
     }
   }
   function initMentor(){
@@ -71,5 +82,6 @@
     if (first) activate(first.dataset.tab);
     initMentor();
     initCollapse();
+    initRowTones();
   });
 })();

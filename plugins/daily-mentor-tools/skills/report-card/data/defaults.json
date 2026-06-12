@@ -5,7 +5,8 @@
     "shopify_markets_fee_pct": 0.015,
     "transaction_fee_per_order_aud": 0.30,
     "packaging_per_order_aud": 0.50,
-    "fulfillment_per_order_aud": 4.50
+    "fulfillment_per_order_aud": 4.50,
+    "target_cm_pct_first_order": 0.25
   },
   "daily_tracker": {
     "after_fees_factor": 0.96
