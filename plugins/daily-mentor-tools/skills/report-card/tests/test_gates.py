@@ -9,7 +9,7 @@ These three gates assert the skill is fit for marketplace distribution:
 Network-resilient: FX falls back gracefully if the rate API is unreachable,
 so these run offline (conversions just use rate 1.0 in that case).
 
-Run:  cd plugins/report-card && python3 -m pytest tests/test_gates.py -v
+Run:  cd plugins/daily-mentor-tools/skills/report-card && python3 -m pytest tests/test_gates.py -v
 """
 from __future__ import annotations
 

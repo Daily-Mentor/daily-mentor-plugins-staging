@@ -5,8 +5,8 @@ A [Claude Code](https://claude.com/claude-code) plugin marketplace for the Daily
 ## Install
 
 ```
-/plugin marketplace add paulcrossland/daily-mentor-plugins
-/plugin install report-card@daily-mentor
+/plugin marketplace add Daily-Mentor/daily-mentor-plugins-staging
+/plugin install daily-mentor-tools@daily-mentor
 ```
 
 ## Layout
@@ -14,24 +14,28 @@ A [Claude Code](https://claude.com/claude-code) plugin marketplace for the Daily
 ```
 .
 ├── .claude-plugin/
-│   └── marketplace.json          # marketplace manifest
+│   └── marketplace.json              # marketplace manifest
 └── plugins/
-    └── report-card/
+    └── daily-mentor-tools/
         ├── .claude-plugin/
-        │   └── plugin.json       # plugin manifest
-        ├── commands/             # slash commands (.md)
-        ├── skills/               # skills (SKILL.md per dir)
-        ├── scripts/              # Python pipeline
-        ├── templates/            # Jinja2 + assets
-        ├── data/                 # benchmarks, defaults, COA, FX cache
-        └── tests/                # pytest
+        │   └── plugin.json           # plugin manifest (name: daily-mentor-tools)
+        ├── commands/                 # slash commands (e.g. /report-card)
+        ├── skills/
+        │   └── report-card/          # Report Card skill: SKILL.md, scripts/, data/, templates/, tests/
+        └── README.md
 ```
 
 ## Plugins
 
-### report-card
+### daily-mentor-tools
 
-Generate a 12-tab e-commerce diagnostic Report Card (HTML + xlsx) from a standardised 7-file input pack (Shopify CSVs + Xero exports + Meta/Google/TikTok ad spend CSVs). See `plugins/report-card/README.md`.
+Daily Mentor toolkit for Claude Code — a suite of e-commerce mentorship skills.
+
+| Skill | What it does |
+|---|---|
+| [`report-card`](plugins/daily-mentor-tools/skills/report-card/) | Generate a 12-tab e-commerce diagnostic Report Card (founder-facing HTML + mentor xlsx) from a standardised Shopify + Xero + ad-platform input pack. Brand- and currency-neutral; quarter-over-quarter NCCM; cohort LTV. |
+
+See [`plugins/daily-mentor-tools/skills/report-card/README.md`](plugins/daily-mentor-tools/skills/report-card/README.md) for required inputs, export steps, and usage.
 
 ## Add a plugin
 
@@ -42,5 +46,5 @@ Generate a 12-tab e-commerce diagnostic Report Card (HTML + xlsx) from a standar
 
 ## Versioning
 
-- Each plugin tracks its own `version` in `plugin.json` and `marketplace.json`.
-- Tag releases on `main` (e.g. `report-card-v0.1.0`) so users can pin refs.
+- Each plugin tracks its own `version` in `plugin.json`, `marketplace.json`, and any skill `SKILL.md` frontmatter.
+- Tag releases on `main` (e.g. `daily-mentor-tools-v0.5.2`) so users can pin refs.

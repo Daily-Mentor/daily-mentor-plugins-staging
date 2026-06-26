@@ -42,11 +42,11 @@ All exports cover the **last 365 days**. Drop them into one folder and point the
 - Xero → Reports → **Account Transactions**
 - Accounts → **Select All**
 - Change time period: default → **Custom Date Range, Last 365 Days**
-- Update columns to show **Date, Contact, Description, Debit (AUD), Credit (AUD)**
+- Update columns to show **Date, Contact, Description, Debit, Credit** (Xero labels these with your reporting currency, e.g. `Debit (AUD)`, `Credit (AUD)`)
 - Hit Update
 - Export as **Excel** file
 - Save Report as `Daily Mentor - Account Transactions`
-- This is the **primary expense source** — the P&L is reconstructed from it (Credit−Debit netted per account/contact/month). A separate Xero P&L export is *optional* and only used if you want the bookkeeper's own categorisation to override the reconstruction.
+- This is the **primary expense source** — the P&L is reconstructed from it (Credit−Debit netted per account/contact/month). The parser reads debit and credit from those column headers (not fixed positions), so the simplified five-column export above is the recommended layout. A separate Xero P&L export is *optional* and only used if you want the bookkeeper's own categorisation to override the reconstruction.
 
 ### Ad platforms — at least one required
 
