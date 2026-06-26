@@ -524,21 +524,75 @@ def _read_xero_bs(path: Path) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+_ATXN_DEBIT_RE = re.compile(r"\bdebit\b", re.IGNORECASE)
+_ATXN_CREDIT_RE = re.compile(r"\bcredit\b", re.IGNORECASE)
+
+
+def _xero_atxn_column_map(ws, header_row: int) -> dict[str, int | None]:
+    """Map logical fields to 1-based column indices from the header row."""
+    headers: list[tuple[int, str]] = []
+    for c in range(1, ws.max_column + 1):
+        v = ws.cell(header_row, c).value
+        if v is not None and str(v).strip():
+            headers.append((c, str(v).strip()))
+
+    def first_match(pred) -> int | None:
+        for c, h in headers:
+            if pred(h):
+                return c
+        return None
+
+    debit_candidates = [(c, h) for c, h in headers if _ATXN_DEBIT_RE.search(h)]
+    credit_candidates = [(c, h) for c, h in headers if _ATXN_CREDIT_RE.search(h)]
+
+    def pick_amount(candidates: list[tuple[int, str]]) -> int | None:
+        if not candidates:
+            return None
+        # Multi-currency exports carry Debit(Source)/Credit(Source) plus reporting-ccy cols.
+        non_source = [(c, h) for c, h in candidates if "source" not in h.lower()]
+        pool = non_source or candidates
+        return pool[-1][0]
+
+    return {
+        "date": first_match(lambda h: h.lower() == "date"),
+        "contact": first_match(lambda h: h.lower().startswith("contact")),
+        "description": first_match(lambda h: "description" in h.lower()),
+        "source": first_match(lambda h: h.lower() == "source"),
+        "reference": first_match(lambda h: "reference" in h.lower()),
+        "currency": first_match(lambda h: "currency" in h.lower()),
+        "debit": pick_amount(debit_candidates),
+        "credit": pick_amount(credit_candidates),
+        "gross": first_match(lambda h: h.lower().startswith("gross")),
+        "gst": first_match(lambda h: h.lower().startswith("gst")),
+    }
+
+
+def _xero_atxn_cell(ws, row: int, col: int | None):
+    if col is None:
+        return None
+    return ws.cell(row, col).value
+
+
+def _xero_atxn_amount(value) -> float:
+    if value in (None, ""):
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _read_xero_atxn(path: Path) -> pd.DataFrame:
     """Parse Xero Account Transactions into long-form (date, account, contact, source, description, debit, credit, gross, gst).
 
-    Section-banded by account in column A. Two known column layouts:
+    Section-banded by account in column A. Column positions vary by export — debit/credit
+    (and other fields) are resolved from header labels, not fixed positions.
 
-    Layout A (PTY LTD / single-currency):
-        A:Date B:Source C:Contact D:Description E:Reference F:Debit G:Credit H:RunBal I:Gross J:GST
-
-    Layout B (Limited / multi-currency, NZD-base):
-        A:Date B:Source C:Description D:Reference E:Currency F:Debit(Source)
-        G:Credit(Source) H:Debit(NZD) I:Credit(NZD) J:Running Balance(NZD)
-
-    In Layout B the Contact is encoded inside Description as `"<Vendor> - <Memo>"`.
-    We always emit cols (debit, credit) in the entity's reporting currency:
-    Layout A -> F/G (single currency), Layout B -> H/I (NZD).
+    Supported layouts include:
+      Date, Contact, Description, Debit (AUD), Credit (AUD)
+      Date, Source, Contact, Description, Reference, Debit, Credit, ...
+      Date, Source, Description, Reference, Currency, Debit(Source), Credit(Source),
+      Debit(NZD), Credit(NZD), ...
     """
     wb = load_workbook(path, data_only=True)
     ws = wb.active
@@ -552,27 +606,19 @@ def _read_xero_atxn(path: Path) -> pd.DataFrame:
     if header_row is None:
         return pd.DataFrame(columns=["date", "account", "contact", "source", "description", "debit", "credit", "gross", "gst"])
 
-    # Detect layout by inspecting header cells
-    header_c = (ws.cell(header_row, 3).value or "")
-    header_e = (ws.cell(header_row, 5).value or "")
-    layout_b = (
-        "currency" in str(header_e).lower()
-        or "description" in str(header_c).lower()
-    )
+    cols = _xero_atxn_column_map(ws, header_row)
+    if cols["debit"] is None or cols["credit"] is None:
+        return pd.DataFrame(columns=["date", "account", "contact", "source", "description", "debit", "credit", "gross", "gst"])
+
+    amount_cols = tuple(c for c in (cols["debit"], cols["credit"], cols["gross"], cols["gst"]) if c is not None)
+    detail_cols = tuple(c for c in (
+        cols["contact"], cols["description"], cols["source"], cols["reference"], cols["currency"],
+    ) if c is not None)
 
     rows = []
     current_account: str | None = None
     for r in range(header_row + 1, ws.max_row + 1):
         a = ws.cell(r, 1).value
-        b = ws.cell(r, 2).value
-        c = ws.cell(r, 3).value
-        d = ws.cell(r, 4).value
-        e = ws.cell(r, 5).value
-        f = ws.cell(r, 6).value
-        g = ws.cell(r, 7).value
-        h = ws.cell(r, 8).value
-        i = ws.cell(r, 9).value
-        j = ws.cell(r, 10).value
         # Detect section header (str in col A, nothing meaningful in others)
         if isinstance(a, str) and not isinstance(a, (int, float)):
             a_str = a.strip()
@@ -582,52 +628,39 @@ def _read_xero_atxn(path: Path) -> pd.DataFrame:
                     continue
                 if a_lower.startswith("total "):
                     continue
-                non_blank = sum(1 for x in (b, c, d, e, f, g) if x not in (None, ""))
+                non_blank = sum(
+                    1 for c in detail_cols + amount_cols
+                    if _xero_atxn_cell(ws, r, c) not in (None, "")
+                )
                 if non_blank == 0:
                     current_account = a_str
                     continue
         # Detect a real transaction row: Date in column A
         if isinstance(a, (datetime, date)):
             tx_date = a.date() if isinstance(a, datetime) else a
-            if layout_b:
-                # Layout B (multi-currency Xero exports: Source ccy + reporting-ccy columns)
-                desc_raw = c.strip() if isinstance(c, str) else (str(c) if c is not None else "")
-                # Vendor extraction: "Vendor - Memo" → vendor; bare strings → whole string.
-                if " - " in desc_raw:
-                    vendor = desc_raw.split(" - ", 1)[0].strip()
-                else:
-                    vendor = desc_raw or "Unknown"
-                debit_val = h if h not in (None, "") else 0.0
-                credit_val = i if i not in (None, "") else 0.0
-                src_ccy = (str(e).strip() if e else None)
-                rows.append({
-                    "date": tx_date,
-                    "account": current_account or "Unknown Account",
-                    "contact": vendor,
-                    "source": b if b is not None else "",
-                    "description": desc_raw,
-                    "reference": d if d is not None else "",
-                    "currency": src_ccy,
-                    "debit": float(debit_val) if debit_val not in (None, "") else 0.0,
-                    "credit": float(credit_val) if credit_val not in (None, "") else 0.0,
-                    "gross": 0.0,
-                    "gst": 0.0,
-                })
+            desc_raw = _xero_atxn_cell(ws, r, cols["description"])
+            desc_text = desc_raw.strip() if isinstance(desc_raw, str) else (str(desc_raw) if desc_raw is not None else "")
+            contact_val = _xero_atxn_cell(ws, r, cols["contact"])
+            if contact_val is not None and str(contact_val).strip():
+                contact = str(contact_val).strip()
+            elif " - " in desc_text:
+                contact = desc_text.split(" - ", 1)[0].strip()
             else:
-                # Layout A (single-currency Xero exports with explicit Contact column)
-                rows.append({
-                    "date": tx_date,
-                    "account": current_account or "Unknown Account",
-                    "contact": (c.strip() if isinstance(c, str) else (c if c is not None else "Unknown")),
-                    "source": b if b is not None else "",
-                    "description": d if d is not None else "",
-                    "reference": e if e is not None else "",
-                    "currency": None,
-                    "debit": float(f) if f not in (None, "") else 0.0,
-                    "credit": float(g) if g not in (None, "") else 0.0,
-                    "gross": float(i) if i not in (None, "") else 0.0,
-                    "gst": float(j) if j not in (None, "") else 0.0,
-                })
+                contact = desc_text or "Unknown"
+            currency_val = _xero_atxn_cell(ws, r, cols["currency"])
+            rows.append({
+                "date": tx_date,
+                "account": current_account or "Unknown Account",
+                "contact": contact,
+                "source": _xero_atxn_cell(ws, r, cols["source"]) or "",
+                "description": desc_text,
+                "reference": _xero_atxn_cell(ws, r, cols["reference"]) or "",
+                "currency": str(currency_val).strip() if currency_val else None,
+                "debit": _xero_atxn_amount(_xero_atxn_cell(ws, r, cols["debit"])),
+                "credit": _xero_atxn_amount(_xero_atxn_cell(ws, r, cols["credit"])),
+                "gross": _xero_atxn_amount(_xero_atxn_cell(ws, r, cols["gross"])),
+                "gst": _xero_atxn_amount(_xero_atxn_cell(ws, r, cols["gst"])),
+            })
     return pd.DataFrame(rows)
 
 
