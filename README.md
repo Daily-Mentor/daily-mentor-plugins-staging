@@ -47,4 +47,4 @@ See [`plugins/daily-mentor-tools/skills/report-card/README.md`](plugins/daily-me
 ## Versioning
 
 - Each plugin tracks its own `version` in `plugin.json`, `marketplace.json`, and any skill `SKILL.md` frontmatter.
-- Tag releases on `main` (e.g. `daily-mentor-tools-v0.5.2`) so users can pin refs.
+- Tag releases on `main` as `vX.Y.Z` (e.g. `v0.5.2`) and publish a matching GitHub release (`daily-mentor-tools v0.5.2`) whenever `plugin.json` / `marketplace.json` / skill versions change.
