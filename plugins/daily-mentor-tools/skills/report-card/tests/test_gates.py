@@ -93,9 +93,9 @@ def test_gate2_preflight_blocks_when_incomplete(tmp_path):
     empty.mkdir()
     report = preflight(empty)
     assert report.is_ready is False
-    # 5 hard-required files (shopify_daily, nc_rc, sessions, xero_bs, xero_atxn);
+    # 6 hard-required files (shopify_daily, nc_rc, sessions, xero_bs, xero_atxn, cohort);
     # P&L is optional and ad spend is an "at least one" group.
-    assert len(report.missing_required) == 5
+    assert len(report.missing_required) == 6
     assert report.ad_platform_present is False
 
 
@@ -149,16 +149,18 @@ def test_ltv_mode_a_cohort_when_present(synthetic_inputs, tmp_path):
 
 
 def test_ltv_mode_b_proxy_when_cohort_absent(tmp_path):
-    """Without a cohort CSV, the LTV tab falls back to the repeat-economics proxy."""
+    """The cohort CSV is required — preflight blocks without it. A --force build
+    still falls back to the repeat-economics proxy on the LTV tab."""
     from tests.make_synthetic_pack import write_pack
     pack = tmp_path / "no-cohort"
     write_pack(pack, with_cohort=False)
+    report = preflight(pack)
+    assert report.is_ready is False
     out = tmp_path / "out"
-    cli_main([str(pack), str(out), "--reporting-currency", "GBP", "--run-date", "2026-05-30"])
+    cli_main([str(pack), str(out), "--reporting-currency", "GBP", "--run-date", "2026-05-30", "--force"])
     html = (out / "report-card-2026-05-30.html").read_text()
     assert "Repeat purchase rate" in html
     assert "true cohort retention curve" in html  # the warning banner
-    # Cohort is optional — build still succeeds without it.
     assert (out / "report-card-2026-05-30.xlsx").exists()
 
 

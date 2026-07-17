@@ -54,11 +54,9 @@ All exports cover the **last 365 days**. Drop them into one folder and point the
 - Export daily spend by campaign for the last 12 months. The currency must appear in the column header (e.g. `Amount spent (AUD)`).
 - Provide at least one platform; all supplied platforms are summed. More is better.
 
-### Optional — unlocks the LTV tab
-
 **7. Cohort Analysis** → e.g. `Daily Mentor - Cohort Analysis customer value by month.csv`
 - Shopify Analytics → **Customers → Cohort Analysis** → *'Customer value by month'* (last 12 months) → Export as CSV
-- With it, the LTV tab renders the true cohort retention matrix and the Final Report Card Month-2 / Month-5 growth benchmarks populate. Without it, the LTV tab degrades to a repeat-economics proxy from the NC/RC split.
+- Drives the true cohort retention matrix on the LTV tab and the Final Report Card Month-2 / Month-5 growth benchmarks.
 
 | Role | Required | Saved-as name |
 |---|---|---|
@@ -68,7 +66,7 @@ All exports cover the **last 365 days**. Drop them into one folder and point the
 | Balance Sheet | yes | `{CLIENT}_-_Balance_Sheet.xlsx` |
 | Account Transactions | yes | `{CLIENT}_-_Account_Transactions.xlsx` |
 | Ad spend (Meta/Google/TikTok) | at least one | `*facebook*spend*` / `*google*spend*` / `*tiktok*spend*` |
-| Cohort Analysis | optional | `*cohort*.csv` |
+| Cohort Analysis | yes | `*cohort*.csv` |
 | Xero Profit & Loss | optional | `{CLIENT}_-_Profit_and_Loss.xlsx` |
 
 Run `python3 -m scripts.cli --preflight <folder>` (or just invoke the skill) to see exactly what's present, missing, or optional before building.

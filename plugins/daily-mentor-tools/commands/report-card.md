@@ -21,7 +21,7 @@ The implementation lives in the `report-card` skill (`skills/report-card/`). Inv
 
 1. **Pre-flight first.** Before building, run `python3 -m scripts.cli --preflight <inputs_dir>` to scan what's present. Read the JSON report.
 2. **If required files are missing**, ask the user to provide them. Use AskUserQuestion or plain conversation — list each missing file by name and explain where it comes from (Shopify export, Xero export, ad platform).
-3. **If optional files are missing**, note them and continue — the build will degrade gracefully (e.g. LTV tab shows a red banner if cohort data is absent).
+3. **If optional files are missing**, note them and continue — the build will degrade gracefully (e.g. the P&L is reconstructed from Account Transactions if absent).
 4. **Run the build** once all required inputs are accounted for: `python3 -m scripts.cli <inputs_dir> <output_dir>`.
 5. **Report results** to the user: which files were used, audit pass/fail summary, output paths.
 

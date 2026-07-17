@@ -139,7 +139,7 @@ class IngestBundle:
     xero_bs: Any | None = None         # long-form: account, as_at, value, section
     xero_atxn: Any | None = None       # long-form: date, account, contact, debit, credit, source, description
     ad_spend: dict[str, Any] = field(default_factory=dict)  # platform → DataFrame (day, campaign, amount_aud, amount_orig, ccy, fx_rate)
-    cohort: Any | None = None          # optional Shopify Cohort CSV
+    cohort: Any | None = None          # Shopify Cohort CSV (required at preflight)
 
 
 # ---------- Audit dataclasses ----------

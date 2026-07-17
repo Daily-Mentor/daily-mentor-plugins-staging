@@ -8,7 +8,7 @@ The 7-file pack:
     *_Balance_Sheet.xlsx             (Xero)
     *_Account_Transactions.xlsx      (Xero)
     facebook_spend.{csv,xlsx}        (optional: google_spend, tiktok_spend)
-    Optional: shopify cohort export
+    shopify cohort export (*cohort*.csv)
 
 Currency is sniffed from CSV column headers (e.g. `Amount spent (NZD)`).
 """

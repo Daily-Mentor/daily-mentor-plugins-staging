@@ -178,9 +178,9 @@ def _spec() -> list[FileRequirement]:
         ),
         FileRequirement(
             role="cohort",
-            label="Shopify Cohort Analysis (optional — unlocks LTV tab)",
-            required=False,
-            description="Customer Value by cohort month. Without this, the LTV tab and Final Report Card M2/M5 growth rows degrade to '—'.",
+            label="Shopify Cohort Analysis",
+            required=True,
+            description="Customer Value by cohort month. Drives the LTV tab (true cohort matrix) and Final Report Card M2/M5 growth rows.",
             source_system="Shopify Admin",
             export_path_hint="Analytics → Reports → Customers → 'Cohort Analysis' → 'Customer value by month, last 6 months' → export CSV.",
             accepted_patterns=["cohort"],
